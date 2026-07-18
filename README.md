@@ -1,6 +1,12 @@
 # visual-macro
 
 [![GitHub](https://img.shields.io/badge/GitHub-visual--macro-181717?logo=github)](https://github.com/yuukl1v9-hash/visual-macro)
+[![Last commit](https://img.shields.io/github/last-commit/yuukl1v9-hash/visual-macro)](https://github.com/yuukl1v9-hash/visual-macro/commits)
+[![Top language](https://img.shields.io/github/languages/top/yuukl1v9-hash/visual-macro)](https://github.com/yuukl1v9-hash/visual-macro)
+[![Code size](https://img.shields.io/github/languages/code-size/yuukl1v9-hash/visual-macro)](https://github.com/yuukl1v9-hash/visual-macro)
+[![Stars](https://img.shields.io/github/stars/yuukl1v9-hash/visual-macro?style=flat)](https://github.com/yuukl1v9-hash/visual-macro/stargazers)
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
 
 A visual automation tool: **see a target on screen → click/type → repeat.**
 Like AutoHotkey and TinyTask, but the steps are anchored to *what things look
