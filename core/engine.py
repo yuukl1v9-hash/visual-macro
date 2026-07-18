@@ -443,14 +443,23 @@ class Engine:
         matching."""
         a = step.args or {}
         multi = bool(a.get("multi_scale", False))
+        edges = bool(a.get("edges", False))
         allow_ambig = bool(a.get("allow_ambiguous", False))
         deadline = time.perf_counter() + step.timeout
         best = 0.0
+        prev_sig = None
         while time.perf_counter() < deadline:
             if self.panic.is_set():
                 return None
             frame = self.capture.grab(region)
-            m = self.detector.find(frame, step.target, step.threshold, multi)
+            # change-gate: if the screen hasn't changed since the last check,
+            # skip the (comparatively costly) match entirely.
+            sig = frame[::16, ::16].tobytes()
+            if sig == prev_sig:
+                time.sleep(0.05)
+                continue
+            prev_sig = sig
+            m = self.detector.find(frame, step.target, step.threshold, multi, edges)
             best = max(best, m.confidence)
             if m.found and m.ambiguous and not allow_ambig:
                 self.log(f"          AMBIGUOUS: best={m.confidence:.2f} vs "
@@ -479,7 +488,8 @@ class Engine:
         try:
             if step.action in ("find_click", "wait_for"):
                 m = self.detector.find(frame, step.target, step.threshold,
-                                       bool(a.get("multi_scale", False)))
+                                       bool(a.get("multi_scale", False)),
+                                       bool(a.get("edges", False)))
                 out.update(found=m.found, confidence=m.confidence,
                            ambiguous=m.ambiguous, second=m.second)
                 if m.box:

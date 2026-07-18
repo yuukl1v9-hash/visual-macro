@@ -52,6 +52,7 @@ class Detector:
         template_name: str,
         threshold: float = 0.80,
         multi_scale: bool = False,
+        edges: bool = False,
     ) -> Match:
         """Locate template_name inside frame_bgr.
 
@@ -60,9 +61,13 @@ class Detector:
         confident, unique hit from an ambiguous one (two look-alikes).
         Grayscale + TM_CCOEFF_NORMED: fast and robust to minor color shifts.
         multi_scale retries a few template sizes for DPI/resolution changes.
+        edges matches on Canny outlines instead of pixels -- robust to theme /
+        colour changes (dark vs light mode) where the shape stays the same.
         """
         tmpl = self._load_template(template_name)
         frame_gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        if edges:
+            frame_gray = cv2.Canny(frame_gray, 50, 150)
         fh, fw = frame_gray.shape[:2]
 
         scales = (1.0,) if not multi_scale else (1.0, 0.9, 1.1, 0.8, 1.25, 0.67, 1.5)
@@ -72,6 +77,8 @@ class Detector:
             if s != 1.0:
                 nw, nh = max(8, int(tmpl.shape[1] * s)), max(8, int(tmpl.shape[0] * s))
                 t = cv2.resize(tmpl, (nw, nh))
+            if edges:
+                t = cv2.Canny(t, 50, 150)
             th, tw = t.shape[:2]
             if th > fh or tw > fw:
                 continue

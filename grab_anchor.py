@@ -16,12 +16,14 @@ import sys
 import cv2
 
 from core.capture import Capture
+from core.dpi import set_dpi_aware
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 
 
 def main() -> int:
+    set_dpi_aware()
     if len(sys.argv) < 2:
         print("Usage: python grab_anchor.py <name>   e.g. example/target_button")
         return 1

@@ -15,6 +15,7 @@ import threading
 
 from pynput import keyboard
 
+from core.dpi import set_dpi_aware
 from core.engine import Engine, Macro
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,7 @@ PANIC_KEY = keyboard.Key.f12
 
 
 def main() -> int:
+    set_dpi_aware()
     macro_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
         HERE, "macros", "example.json"
     )

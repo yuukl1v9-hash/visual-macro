@@ -22,6 +22,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from core.engine import Engine, Macro, Step  # noqa: E402
+from core.dpi import set_dpi_aware  # noqa: E402
 import recorder as recorder_mod  # noqa: E402
 
 from pynput import keyboard  # noqa: E402
@@ -138,7 +139,12 @@ def describe(step: dict) -> tuple[str, str]:
 
 class App(tk.Tk):
     def __init__(self):
+        set_dpi_aware()  # correct click coords on scaled displays
         super().__init__()
+        try:  # keep the UI readable at 125%/150% scaling
+            self.tk.call("tk", "scaling", max(1.0, self.winfo_fpixels("1i") / 72.0))
+        except tk.TclError:
+            pass
         self.title("visual-macro")
         self.geometry("640x560")
         self.minsize(560, 460)
@@ -983,6 +989,15 @@ class RegionPicker(tk.Toplevel):
 
 
 def main():
+    if "--selftest" in sys.argv:
+        # smoke test (used to verify a packaged build): build the window,
+        # pump the event loop briefly, then exit 0.
+        app = App()
+        app.update_idletasks()
+        app.update()
+        app.destroy()
+        print("selftest OK")
+        return
     App().mainloop()
 
 

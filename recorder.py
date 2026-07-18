@@ -34,6 +34,7 @@ from pynput import keyboard, mouse
 from pynput.keyboard import Key, KeyCode
 
 from core.capture import Capture
+from core.dpi import set_dpi_aware
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
@@ -58,6 +59,7 @@ def _safe(name: str) -> str:
 
 class Recorder:
     def __init__(self, name: str, log=print):
+        set_dpi_aware()
         self.log = log
         self.name = _safe(name)
         self.asset_dir = os.path.join(ASSETS, self.name)

@@ -94,6 +94,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+**Standalone .exe (no Python for end users):** run **`build_exe.bat`** — it
+bundles the app with PyInstaller into `dist\visual-macro\visual-macro.exe`. Zip
+that folder and it runs on any Windows PC without Python installed. (OCR and the
+ML detector are optional and not bundled by default — see the note the script
+prints.)
+
 ## Try it (30 seconds)
 
 1. Capture a button to look for — run this, then drag a box around **any**
@@ -142,7 +148,10 @@ wrong clicks — and the app now guards both:
 - **Weak matches are refused** by the threshold. Use **🔍 Test** to read the
   confidence, then raise the step's threshold (e.g. `0.90`) to reject near-misses.
 - **Different DPI/resolution?** Turn on `multi_scale` in the step's args and it
-  matches the anchor at several sizes.
+  matches the anchor at several sizes. (The app is also DPI-aware, so clicks land
+  correctly at 125%/150% display scaling.)
+- **Theme/colour changed** (dark vs light mode)? Set `edges: true` in the step's
+  args to match the button's *outline* instead of its pixels.
 
 ## Record a macro (the easy way)
 
@@ -374,7 +383,8 @@ minimum OCR confidence (default 0.50).
 visual-macro/
 ├─ core/
 │  ├─ capture.py    # screen grab (dxcam if present, else mss)
-│  ├─ detector.py   # OpenCV template match -> (found, center, confidence)
+│  ├─ dpi.py        # per-monitor DPI awareness (correct clicks when scaled)
+│  ├─ detector.py   # OpenCV template match + ambiguity/edge/multi-scale
 │  ├─ ocr.py        # RapidOCR text match -> (found, center, confidence)
 │  ├─ ml_detector.py# YOLOv8 ONNX object detector -> (found, center, confidence)
 │  ├─ actuator.py   # mouse/keyboard via pynput (center-click, settle delay)
@@ -384,6 +394,7 @@ visual-macro/
 ├─ models/          # drop a YOLOv8 .onnx here for object detection
 ├─ train_detector.py# train + export your own model (needs ultralytics)
 ├─ run_ui.bat       # double-click launcher (sets up venv, runs the app)
+├─ build_exe.bat    # bundle a standalone .exe with PyInstaller
 ├─ ui/app.py        # the desktop app: toolbar + step list (Tkinter)
 ├─ recorder.py      # record a task by doing it once (F10 to stop)
 ├─ grab_anchor.py   # capture an anchor by dragging a box (manual)
@@ -401,6 +412,11 @@ visual-macro/
 - [x] **Loops** — `loop` / `end_loop` with `break` / `continue` and while/until
 - [x] **Sub-macros** — `call` another macro as a subroutine (recursion-safe)
 - [x] **Variables** — `set` / `read_text`, `${var}` substitution, `var` conditions
+- [x] **Reliability** — ambiguous/weak-match refusal, `multi_scale`, `edges`
+      matching, DPI-awareness, and a **Test** button that previews a match
+- [x] **Region picker** — drag a box to set a search region
+- [x] **Dark theme** — restyled UI (and dark title bar)
+- [x] **Packaging** — `build_exe.bat` → standalone Windows `.exe`
 
 ## Safety notes
 
