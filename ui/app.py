@@ -33,6 +33,7 @@ MACROS = os.path.join(ROOT, "macros")
 # Dark palette (Catppuccin-ish) used across the UI.
 THEME = {
     "bg": "#1e1e2e", "surface": "#313244", "surface2": "#45475a",
+    "stripe": "#2a2a3a",  # subtle alternate row shade
     "border": "#585b70", "text": "#cdd6f4", "subtext": "#a6adc8",
     "accent": "#89b4fa", "accent2": "#b4befe",
     "ok": "#a6e3a1", "warn": "#f9e2af", "err": "#f38ba8",
@@ -309,6 +310,8 @@ class App(tk.Tk):
         self.tree.column("detail", width=380)
         self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<Double-1>", lambda e: self.on_edit())
+        self.tree.tag_configure("odd", background=THEME["surface"])
+        self.tree.tag_configure("even", background=THEME["stripe"])
 
         # empty-state hint shown over the (blank) list
         self.empty_hint = tk.Label(
@@ -409,8 +412,9 @@ class App(tk.Tk):
                 depth = max(0, depth - 1)
             level = depth - 1 if (act == "else" and depth > 0) else depth
             action = ("    " * level) + action
+            tag = "even" if (i - 1) % 2 else "odd"
             self.tree.insert("", "end", iid=str(i - 1),
-                             values=(i, action, detail))
+                             values=(i, action, detail), tags=(tag,))
             if act in ("if", "loop"):
                 depth += 1
         if keep is not None and self.steps:
