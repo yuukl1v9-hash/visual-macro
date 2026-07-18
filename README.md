@@ -120,15 +120,21 @@ python ui/app.py
 ```
 
 - **● Record** — name it, do your task, press **F10**. Steps appear in the list.
-  (The window minimizes while recording so your clicks don't hit it.)
+  While recording, the window minimizes and a floating **● Recording — press F10
+  to stop** badge stays on screen so you're never recording blind.
 - **▶ Play** — runs the macro. **Loop** sets how many times (0 = forever).
 - **■ Stop** / **F12** — abort a run instantly.
 - **Step list** — select a row, then **▲/▼** to reorder, **Edit** (or double-click)
-  to change a field, **Delete**, or **+ Add** a step by type.
+  to change a field, **Delete**, or **+ Add** a step.
 - **🔍 Test** — select a detection step and Test it: it searches the screen
   *without* clicking, flashes a box where it *would* click, and logs the
   confidence — so you can see and fix a bad match before you ever run the macro.
 - **New / Open / Save** — macros are JSON files in `macros/`.
+
+Hover any button for a tooltip, and an empty macro shows a hint on what to do.
+**+ Add** opens a plain-English menu — no need to know the internal step names:
+
+<p align="center"><img src="docs/addmenu.png" alt="the plain-English add-step menu" width="300"></p>
 
 Editing a step opens a small dialog whose fields match the step type — no syntax.
 Fields that take a screen region have a **Pick ▢** button: drag a box on screen

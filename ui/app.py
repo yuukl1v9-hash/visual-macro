@@ -146,8 +146,8 @@ class App(tk.Tk):
         except tk.TclError:
             pass
         self.title("visual-macro")
-        self.geometry("640x560")
-        self.minsize(560, 460)
+        self.geometry("700x580")
+        self.minsize(640, 470)
 
         self.steps: list[dict] = []
         self.macro_name = "untitled"
@@ -165,6 +165,7 @@ class App(tk.Tk):
         self._start_panic_listener()
         self.after(80, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.refresh()  # shows the empty-state hint on first launch
         self.log("Ready. Record a task or open a macro.")
 
     # -- theme -------------------------------------------------------------
@@ -217,6 +218,10 @@ class App(tk.Tk):
         self.btn_record.pack(side="left")
         self.btn_play.pack(side="left", padx=(6, 0))
         self.btn_stop.pack(side="left", padx=(6, 12))
+        Tooltip(self.btn_record, "Do a task by hand once — it records the steps.\n"
+                                 "Press F10 to stop recording.")
+        Tooltip(self.btn_play, "Run the macro. Loop sets how many times.")
+        Tooltip(self.btn_stop, "Stop a running macro (or press F12 anytime).")
 
         ttk.Label(bar, text="Loop:").pack(side="left")
         self.loop_var = tk.StringVar(value="1")
@@ -249,18 +254,32 @@ class App(tk.Tk):
         self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<Double-1>", lambda e: self.on_edit())
 
+        # empty-state hint shown over the (blank) list
+        self.empty_hint = tk.Label(
+            self.tree, bg=THEME["surface"], fg=THEME["subtext"],
+            font=("Segoe UI", 11), justify="center",
+            text="No steps yet.\n\n"
+                 "Click  ● Record  to capture a task by doing it once,\n"
+                 "or  + Add  to build one step at a time.")
+
         sb = ttk.Scrollbar(mid, orient="vertical", command=self.tree.yview)
         sb.pack(side="left", fill="y")
         self.tree.configure(yscrollcommand=sb.set)
 
         side = ttk.Frame(mid, padding=(6, 0))
         side.pack(side="left", fill="y")
-        for text, cmd in [
-            ("▲ Up", self.on_up), ("▼ Down", self.on_down),
-            ("Edit", self.on_edit), ("Delete", self.on_delete),
-            ("+ Add", self.on_add), ("🔍 Test", self.on_test),
+        for text, cmd, tip in [
+            ("▲ Up", self.on_up, "Move the selected step up"),
+            ("▼ Down", self.on_down, "Move the selected step down"),
+            ("Edit", self.on_edit, "Edit the selected step (or double-click it)"),
+            ("Delete", self.on_delete, "Delete the selected step"),
+            ("+ Add", self.on_add, "Add a new step (plain-English menu)"),
+            ("🔍 Test", self.on_test, "Preview where the selected step would click —\n"
+                                      "without clicking. Shows a box + confidence."),
         ]:
-            ttk.Button(side, text=text, width=9, command=cmd).pack(pady=2)
+            b = ttk.Button(side, text=text, width=9, command=cmd)
+            b.pack(pady=2)
+            Tooltip(b, tip)
 
         # log
         c = THEME
@@ -344,6 +363,10 @@ class App(tk.Tk):
             self.tree.focus(iid)
         self.name_lbl.configure(text=self.macro_name)
         self.set_status(f"{len(self.steps)} steps")
+        if self.steps:
+            self.empty_hint.place_forget()
+        else:
+            self.empty_hint.place(relx=0.5, rely=0.42, anchor="center")
 
     def _selected_index(self) -> int | None:
         sel = self.tree.selection()
@@ -362,6 +385,7 @@ class App(tk.Tk):
         self._set_busy(True)
         self.log(f"Recording '{name}' — do your task, press F10 to stop.")
         self.set_status("Recording…  (window minimized; press F10 to stop)")
+        self._show_rec_banner()
         self.iconify()  # get the UI out of the way so clicks don't hit it
 
         def worker():
@@ -377,9 +401,40 @@ class App(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _show_rec_banner(self) -> None:
+        """A floating 'recording' badge that stays visible while the main
+        window is minimized (so you're never recording blind)."""
+        b = tk.Toplevel(self)
+        b.overrideredirect(True)
+        b.attributes("-topmost", True)
+        try:
+            b.attributes("-alpha", 0.93)
+        except tk.TclError:
+            pass
+        f = tk.Frame(b, bg="#11111b", padx=16, pady=9)
+        f.pack()
+        tk.Label(f, text="●", bg="#11111b", fg="#f38ba8",
+                 font=("Segoe UI", 14, "bold")).pack(side="left")
+        tk.Label(f, text="  Recording  ·  press  F10  to stop", bg="#11111b",
+                 fg="#cdd6f4", font=("Segoe UI", 12, "bold")).pack(side="left")
+        b.update_idletasks()
+        sw = b.winfo_screenwidth()
+        b.geometry(f"+{(sw - b.winfo_width()) // 2}+22")
+        self._rec_banner = b
+
+    def _hide_rec_banner(self) -> None:
+        b = getattr(self, "_rec_banner", None)
+        if b is not None:
+            try:
+                b.destroy()
+            except tk.TclError:
+                pass
+            self._rec_banner = None
+
     def _after_record(self) -> None:
         self._recording = False
         self._set_busy(False)
+        self._hide_rec_banner()
         self.deiconify()
         self.lift()
 
@@ -676,20 +731,100 @@ def _is_default(key: str, val) -> bool:
     return key in defaults and val == defaults[key]
 
 
+# Plain-English step menu (label -> engine action; None = section header).
+FRIENDLY_STEPS = [
+    ("—  Click something  —", None),
+    ("Click an image on screen", "find_click"),
+    ("Click text (reads the screen)", "find_text_click"),
+    ("Click an object (AI model)", "find_object_click"),
+    ("Click a fixed X, Y spot", "click"),
+    ("—  Wait  —", None),
+    ("Wait for an image to appear", "wait_for"),
+    ("Wait for text to appear", "wait_for_text"),
+    ("Wait for an object to appear", "wait_for_object"),
+    ("Wait a set amount of time", "wait"),
+    ("—  Type  —", None),
+    ("Type some text", "type"),
+    ("Press keys (e.g. Ctrl+S)", "hotkey"),
+    ("—  Only-if / repeat  —", None),
+    ("If found… (run steps only when on screen)", "if"),
+    ("Else", "else"),
+    ("End if", "end_if"),
+    ("Repeat a block (loop)…", "loop"),
+    ("End loop", "end_loop"),
+    ("Break out of the loop", "break"),
+    ("Skip to the next loop pass", "continue"),
+    ("—  Advanced  —", None),
+    ("Set a variable", "set"),
+    ("Read screen text into a variable", "read_text"),
+    ("Run another saved macro", "call"),
+]
+
+
+class Tooltip:
+    """Tiny hover tooltip for a widget."""
+
+    def __init__(self, widget, text):
+        self.widget, self.text, self.tip = widget, text, None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def _show(self, _):
+        if self.tip:
+            return
+        x = self.widget.winfo_rootx() + 8
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.tip = tk.Toplevel(self.widget)
+        self.tip.overrideredirect(True)
+        self.tip.attributes("-topmost", True)
+        self.tip.geometry(f"+{x}+{y}")
+        tk.Label(self.tip, text=self.text, bg="#11111b", fg="#cdd6f4",
+                 font=("Segoe UI", 9), padx=6, pady=3, relief="solid", bd=1,
+                 justify="left").pack()
+
+    def _hide(self, _):
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+
+
 def _choose_action(parent) -> str | None:
     dlg = tk.Toplevel(parent)
-    dlg.title("Add step")
+    dlg.title("Add a step")
+    dlg.configure(bg=THEME["bg"])
     dlg.transient(parent)
     dlg.grab_set()
-    ttk.Label(dlg, text="Step type:", padding=8).pack()
-    var = tk.StringVar(value=_ACTIONS[0])
-    ttk.Combobox(dlg, textvariable=var, values=_ACTIONS, state="readonly").pack(
-        padx=10)
+    ttk.Label(dlg, text="What should this step do?",
+              padding=(12, 10)).pack(anchor="w")
+    c = THEME
+    lb = tk.Listbox(dlg, width=40, height=len(FRIENDLY_STEPS), activestyle="none",
+                    bg=c["surface"], fg=c["text"], selectbackground=c["accent"],
+                    selectforeground=c["bg"], relief="flat", highlightthickness=0,
+                    font=("Segoe UI", 10))
+    for i, (label, act) in enumerate(FRIENDLY_STEPS):
+        lb.insert("end", label)
+        if act is None:  # dim the section headers
+            lb.itemconfig(i, foreground=c["subtext"], selectbackground=c["surface"])
+    lb.pack(padx=12, fill="both", expand=True)
     out = {"v": None}
-    def ok():
-        out["v"] = var.get()
+
+    def ok(*_):
+        sel = lb.curselection()
+        if not sel:
+            return
+        act = FRIENDLY_STEPS[sel[0]][1]
+        if act is None:  # header row — ignore
+            return
+        out["v"] = act
         dlg.destroy()
-    ttk.Button(dlg, text="Add", command=ok).pack(pady=8)
+
+    lb.bind("<Double-1>", ok)
+    btnf = ttk.Frame(dlg, padding=10)
+    btnf.pack()
+    ttk.Button(btnf, text="Add", style="Accent.TButton", command=ok).pack(
+        side="left", padx=4)
+    ttk.Button(btnf, text="Cancel", command=dlg.destroy).pack(side="left")
+    _dark_titlebar(dlg)
     parent.wait_window(dlg)
     return out["v"]
 
