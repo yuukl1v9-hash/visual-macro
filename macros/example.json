@@ -1,0 +1,33 @@
+{
+  "name": "example — find a button and click it",
+  "repeat": 1,
+  "region": null,
+  "steps": [
+    {
+      "action": "wait",
+      "args": { "seconds": 2.0 }
+    },
+    {
+      "action": "wait_for",
+      "target": "example/target_button",
+      "timeout": 10.0,
+      "threshold": 0.80,
+      "on_fail": "abort"
+    },
+    {
+      "action": "find_click",
+      "target": "example/target_button",
+      "timeout": 5.0,
+      "threshold": 0.80,
+      "on_fail": "abort"
+    },
+    {
+      "action": "wait",
+      "args": { "seconds": 0.5 }
+    },
+    {
+      "action": "type",
+      "target": "hello from visual-macro"
+    }
+  ]
+}
