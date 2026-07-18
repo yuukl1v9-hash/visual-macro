@@ -7,6 +7,7 @@
 [![Stars](https://img.shields.io/github/stars/yuukl1v9-hash/visual-macro?style=flat)](https://github.com/yuukl1v9-hash/visual-macro/stargazers)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)
+[![License: MIT](https://img.shields.io/github/license/yuukl1v9-hash/visual-macro)](LICENSE)
 
 A visual automation tool: **see a target on screen → click/type → repeat.**
 Like AutoHotkey and TinyTask, but the steps are anchored to *what things look
@@ -337,4 +338,7 @@ visual-macro/
 - Keep the F12 listener in mind — it's your kill switch.
 - A macro only acts when confidence clears the threshold; on a miss it retries
   then aborts rather than clicking blindly where the button "should" be.
-```
+
+## License
+
+[MIT](LICENSE) © Yuuk
