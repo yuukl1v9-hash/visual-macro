@@ -383,10 +383,30 @@ class App(tk.Tk):
             return
         self._recording = True
         self._set_busy(True)
-        self.log(f"Recording '{name}' — do your task, press F10 to stop.")
-        self.set_status("Recording…  (window minimized; press F10 to stop)")
+        self._rec_name = name
+        self.set_status("Get ready — recording starts after the countdown…")
         self._show_rec_banner()
         self.iconify()  # get the UI out of the way so clicks don't hit it
+        self._countdown(self.COUNTDOWN_START)  # time to switch to your app
+
+    COUNTDOWN_START = 3
+
+    def _countdown(self, n: int) -> None:
+        if not self._recording:  # cancelled (e.g. window closed)
+            return
+        if n <= 0:
+            self._start_recording()
+            return
+        self._set_banner("countdown", n)
+        self.after(1000, lambda: self._countdown(n - 1))
+
+    def _start_recording(self) -> None:
+        if not self._recording:
+            return
+        name = self._rec_name
+        self._set_banner("recording")
+        self.log(f"Recording '{name}' — do your task, press F10 to stop.")
+        self.set_status("Recording…  (window minimized; press F10 to stop)")
 
         def worker():
             try:
@@ -402,25 +422,41 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _show_rec_banner(self) -> None:
-        """A floating 'recording' badge that stays visible while the main
-        window is minimized (so you're never recording blind)."""
+        """A floating badge that stays visible while the main window is
+        minimized — shows the countdown, then the live recording state."""
         b = tk.Toplevel(self)
         b.overrideredirect(True)
         b.attributes("-topmost", True)
         try:
-            b.attributes("-alpha", 0.93)
+            b.attributes("-alpha", 0.94)
         except tk.TclError:
             pass
-        f = tk.Frame(b, bg="#11111b", padx=16, pady=9)
+        f = tk.Frame(b, bg="#11111b", padx=18, pady=10)
         f.pack()
-        tk.Label(f, text="●", bg="#11111b", fg="#f38ba8",
-                 font=("Segoe UI", 14, "bold")).pack(side="left")
-        tk.Label(f, text="  Recording  ·  press  F10  to stop", bg="#11111b",
-                 fg="#cdd6f4", font=("Segoe UI", 12, "bold")).pack(side="left")
+        self._rec_dot = tk.Label(f, text="●", bg="#11111b", fg="#f9e2af",
+                                 font=("Segoe UI", 15, "bold"))
+        self._rec_dot.pack(side="left")
+        self._rec_text = tk.Label(f, text="", bg="#11111b", fg="#cdd6f4",
+                                   font=("Segoe UI", 12, "bold"))
+        self._rec_text.pack(side="left")
+        self._rec_banner = b
+        # initial text/position is set by the first _countdown tick, which
+        # runs synchronously right after this in on_record()
+
+    def _set_banner(self, mode: str, n: int = 0) -> None:
+        b = getattr(self, "_rec_banner", None)
+        if b is None:
+            return
+        if mode == "countdown":
+            self._rec_dot.config(fg="#f9e2af")  # amber while waiting
+            self._rec_text.config(
+                text=f"  Recording in {n}…   switch to your app")
+        else:
+            self._rec_dot.config(fg="#f38ba8")  # red = live
+            self._rec_text.config(text="  Recording  ·  press  F10  to stop")
         b.update_idletasks()
         sw = b.winfo_screenwidth()
         b.geometry(f"+{(sw - b.winfo_width()) // 2}+22")
-        self._rec_banner = b
 
     def _hide_rec_banner(self) -> None:
         b = getattr(self, "_rec_banner", None)

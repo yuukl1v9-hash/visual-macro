@@ -119,9 +119,10 @@ prints.)
 python ui/app.py
 ```
 
-- **● Record** — name it, do your task, press **F10**. Steps appear in the list.
-  While recording, the window minimizes and a floating **● Recording — press F10
-  to stop** badge stays on screen so you're never recording blind.
+- **● Record** — name it, then a **3-2-1 countdown** gives you time to switch to
+  your target app (clicks during the countdown aren't recorded). The window
+  minimizes and a floating badge shows the countdown, then **● Recording — press
+  F10 to stop**, so you're never recording blind. Do your task, press **F10**.
 - **▶ Play** — runs the macro. **Loop** sets how many times (0 = forever).
 - **■ Stop** / **F12** — abort a run instantly.
 - **Step list** — select a row, then **▲/▼** to reorder, **Edit** (or double-click)
