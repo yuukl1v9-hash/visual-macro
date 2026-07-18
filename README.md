@@ -91,6 +91,8 @@ Prefer the command line? The recorder and player also run standalone — see bel
 
 ## Record a macro (the easy way)
 
+<p align="center"><img src="docs/record.gif" alt="recording a login flow — steps and log appear live" width="560"></p>
+
 ```powershell
 python recorder.py my-macro
 ```
@@ -107,9 +109,7 @@ your mouse and keyboard and writes `macros/my-macro.json` + anchor PNGs in
 - **long pauses** → a `wait` step, preserving your pacing
 
 Each action shows up live as it's captured, and the finished steps are ready to
-play, reorder, or edit:
-
-<p align="center"><img src="docs/recording.png" alt="the app after recording a login flow" width="560"></p>
+play, reorder, or edit.
 
 Then play it back:
 
