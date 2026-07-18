@@ -23,6 +23,27 @@ moves or the layout shifts.
 > Built for desktop automation — installers, tedious UI workflows, testing your
 > own apps. Not for sending input into online games (that's against their ToS).
 
+## Contents
+
+- [Screenshots](#screenshots)
+- [Status](#status)
+- [Setup](#setup)
+- [Try it (30 seconds)](#try-it-30-seconds)
+- [The app](#the-app)
+- [Record a macro](#record-a-macro-the-easy-way)
+- [How a macro works](#how-a-macro-works)
+  - [Step actions](#step-actions)
+  - [ML object detection](#ml-object-detection-buttons-that-change-appearance)
+  - [Variables](#variables)
+  - [Reusable sub-macros](#reusable-sub-macros-call)
+  - [Loops](#loops-loop--end_loop--break--continue)
+  - [Conditionals](#conditionals-if--else--end_if)
+  - [Finding text (OCR)](#finding-text-ocr)
+- [Layout](#layout)
+- [Roadmap](#roadmap)
+- [Safety notes](#safety-notes)
+- [License](#license)
+
 ## Screenshots
 
 <table>
