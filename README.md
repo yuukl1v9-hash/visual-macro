@@ -106,6 +106,11 @@ your mouse and keyboard and writes `macros/my-macro.json` + anchor PNGs in
 - **enter / tab / esc / arrows** → a `hotkey` step
 - **long pauses** → a `wait` step, preserving your pacing
 
+Each action shows up live as it's captured, and the finished steps are ready to
+play, reorder, or edit:
+
+<p align="center"><img src="docs/recording.png" alt="the app after recording a login flow" width="560"></p>
+
 Then play it back:
 
 ```powershell
