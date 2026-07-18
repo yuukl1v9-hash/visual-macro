@@ -1,5 +1,7 @@
 # visual-macro
 
+[![GitHub](https://img.shields.io/badge/GitHub-visual--macro-181717?logo=github)](https://github.com/yuukl1v9-hash/visual-macro)
+
 A visual automation tool: **see a target on screen → click/type → repeat.**
 Like AutoHotkey and TinyTask, but the steps are anchored to *what things look
 like*, not fixed `(x, y)` coordinates — so a macro keeps working when a window
