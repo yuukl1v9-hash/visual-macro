@@ -23,6 +23,12 @@ moves or the layout shifts.
 > Built for desktop automation — installers, tedious UI workflows, testing your
 > own apps. Not for sending input into online games (that's against their ToS).
 
+## Demo
+
+The macro finds each field by sight and drives it — no fixed coordinates:
+
+<p align="center"><img src="docs/demo.gif" alt="visual-macro driving a login form" width="360"></p>
+
 ## Status
 
 **Feature-complete MVP** — core engine, recorder, and a desktop UI. Record a
@@ -62,6 +68,8 @@ pip install -r requirements.txt
 3. **Press F12 anytime to hard-stop.** (Or slam the mouse into a screen corner.)
 
 ## The app
+
+<p align="center"><img src="docs/ui.png" alt="visual-macro app window" width="560"></p>
 
 ```powershell
 python ui/app.py
