@@ -29,6 +29,28 @@ from pynput import keyboard  # noqa: E402
 ASSETS = os.path.join(ROOT, "assets")
 MACROS = os.path.join(ROOT, "macros")
 
+# Dark palette (Catppuccin-ish) used across the UI.
+THEME = {
+    "bg": "#1e1e2e", "surface": "#313244", "surface2": "#45475a",
+    "border": "#585b70", "text": "#cdd6f4", "subtext": "#a6adc8",
+    "accent": "#89b4fa", "accent2": "#b4befe",
+    "ok": "#a6e3a1", "warn": "#f9e2af", "err": "#f38ba8",
+}
+
+
+def _dark_titlebar(win) -> None:
+    """Ask Windows to paint this window's title bar dark (no-op elsewhere)."""
+    try:
+        import ctypes
+        win.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+        val = ctypes.c_int(1)
+        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE: 20 new, 19 older
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, attr, ctypes.byref(val), ctypes.sizeof(val))
+    except Exception:
+        pass
+
 
 def _describe_cond(cond: dict) -> str:
     cond = cond or {}
@@ -131,11 +153,50 @@ class App(tk.Tk):
         self._running = False
         self._recording = False
 
+        self._apply_theme()
         self._build_ui()
+        _dark_titlebar(self)
         self._start_panic_listener()
         self.after(80, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.log("Ready. Record a task or open a macro.")
+
+    # -- theme -------------------------------------------------------------
+    def _apply_theme(self) -> None:
+        """A dark theme so it doesn't look like a plain Tk dialog."""
+        c = THEME
+        self.configure(bg=c["bg"])
+        st = ttk.Style(self)
+        st.theme_use("clam")
+        st.configure(".", background=c["bg"], foreground=c["text"],
+                     fieldbackground=c["surface"], bordercolor=c["border"],
+                     focuscolor=c["accent"], font=("Segoe UI", 10))
+        st.configure("TFrame", background=c["bg"])
+        st.configure("TLabel", background=c["bg"], foreground=c["text"])
+        st.configure("Dim.TLabel", foreground=c["subtext"])
+        st.configure("Status.TLabel", background=c["surface"], foreground=c["subtext"])
+        st.configure("TButton", background=c["surface2"], foreground=c["text"],
+                     bordercolor=c["border"], focusthickness=0, padding=(8, 4),
+                     relief="flat")
+        st.map("TButton",
+               background=[("active", c["accent"]), ("pressed", c["accent"]),
+                           ("disabled", c["surface"])],
+               foreground=[("active", c["bg"]), ("disabled", c["subtext"])])
+        st.configure("Accent.TButton", background=c["accent"], foreground=c["bg"])
+        st.map("Accent.TButton", background=[("active", c["accent2"])])
+        st.configure("TSpinbox", fieldbackground=c["surface"], foreground=c["text"],
+                     arrowcolor=c["text"], bordercolor=c["border"])
+        st.configure("TEntry", fieldbackground=c["surface"], foreground=c["text"],
+                     bordercolor=c["border"], insertcolor=c["text"])
+        st.configure("Treeview", background=c["surface"], fieldbackground=c["surface"],
+                     foreground=c["text"], borderwidth=0, rowheight=24)
+        st.configure("Treeview.Heading", background=c["surface2"],
+                     foreground=c["subtext"], relief="flat")
+        st.map("Treeview.Heading", background=[("active", c["surface2"])])
+        st.map("Treeview", background=[("selected", c["accent"])],
+               foreground=[("selected", c["bg"])])
+        st.configure("Vertical.TScrollbar", background=c["surface2"],
+                     troughcolor=c["bg"], bordercolor=c["bg"], arrowcolor=c["text"])
 
     # -- layout ------------------------------------------------------------
     def _build_ui(self) -> None:
@@ -143,7 +204,8 @@ class App(tk.Tk):
         bar.pack(fill="x")
 
         self.btn_record = ttk.Button(bar, text="● Record", command=self.on_record)
-        self.btn_play = ttk.Button(bar, text="▶ Play", command=self.on_play)
+        self.btn_play = ttk.Button(bar, text="▶ Play", command=self.on_play,
+                                   style="Accent.TButton")
         self.btn_stop = ttk.Button(bar, text="■ Stop", command=self.on_stop,
                                    state="disabled")
         self.btn_record.pack(side="left")
@@ -163,7 +225,7 @@ class App(tk.Tk):
             side="left", padx=(6, 0))
         ttk.Button(filebar, text="Save…", command=self.on_save).pack(
             side="left", padx=(6, 0))
-        self.name_lbl = ttk.Label(filebar, text="untitled")
+        self.name_lbl = ttk.Label(filebar, text="untitled", style="Dim.TLabel")
         self.name_lbl.pack(side="right")
 
         # step list
@@ -190,19 +252,26 @@ class App(tk.Tk):
         for text, cmd in [
             ("▲ Up", self.on_up), ("▼ Down", self.on_down),
             ("Edit", self.on_edit), ("Delete", self.on_delete),
-            ("+ Add", self.on_add),
+            ("+ Add", self.on_add), ("🔍 Test", self.on_test),
         ]:
             ttk.Button(side, text=text, width=9, command=cmd).pack(pady=2)
 
         # log
+        c = THEME
         logframe = ttk.Frame(self, padding=(8, 4))
         logframe.pack(fill="both")
         self.log_txt = tk.Text(logframe, height=8, state="disabled", wrap="word",
-                               font=("Consolas", 9))
+                               font=("Consolas", 9), bg=c["surface"],
+                               fg=c["subtext"], insertbackground=c["text"],
+                               relief="flat", highlightthickness=0,
+                               padx=8, pady=6)
         self.log_txt.pack(fill="both", expand=True)
+        self.log_txt.tag_configure("ok", foreground=c["ok"])
+        self.log_txt.tag_configure("warn", foreground=c["warn"])
+        self.log_txt.tag_configure("err", foreground=c["err"])
 
-        self.status = ttk.Label(self, text="", anchor="w", padding=(8, 2),
-                                relief="sunken")
+        self.status = ttk.Label(self, text="", anchor="w", padding=(8, 3),
+                                style="Status.TLabel")
         self.status.pack(fill="x")
 
     # -- logging (thread-safe) --------------------------------------------
@@ -217,8 +286,16 @@ class App(tk.Tk):
         try:
             while True:
                 msg = self._log_q.get_nowait()
+                low = msg.lower()
+                tag = ""
+                if "ambiguous" in low or "not found" in low or "error" in low \
+                        or "fail" in low or "panic" in low:
+                    tag = "warn" if "ambiguous" in low or "not found" in low else "err"
+                elif "found (" in low or "saved" in low or "done" in low \
+                        or "✓" in msg:
+                    tag = "ok"
                 self.log_txt.configure(state="normal")
-                self.log_txt.insert("end", msg + "\n")
+                self.log_txt.insert("end", msg + "\n", tag)
                 self.log_txt.see("end")
                 self.log_txt.configure(state="disabled")
         except queue.Empty:
@@ -396,6 +473,76 @@ class App(tk.Tk):
             self.steps[i] = edited
             self.refresh()
 
+    # -- test a single detection step -------------------------------------
+    DETECTION = {"find_click", "wait_for", "find_text_click", "wait_for_text",
+                 "find_object_click", "wait_for_object"}
+
+    def on_test(self) -> None:
+        i = self._selected_index()
+        if i is None:
+            messagebox.showinfo("Test", "Select a step to test.")
+            return
+        step_dict = self.steps[i]
+        if step_dict.get("action") not in self.DETECTION:
+            messagebox.showinfo("Test", "Pick a Click-image / text / object step "
+                                        "— those are the ones that search the screen.")
+            return
+        if self._running or self._recording:
+            return
+        self.log(f"[test] step {i + 1}: searching the screen…")
+        self.iconify()  # get out of the way so we test the real screen behind us
+
+        def worker():
+            try:
+                eng = Engine(assets_dir=ASSETS, log=self.log)
+                res = eng.test_step(Step(**step_dict),
+                                    tuple(self.region) if self.region else None)
+            except Exception as e:
+                res = {"error": str(e)}
+            self.post(lambda: self._show_test_result(res))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_test_result(self, res: dict) -> None:
+        self.deiconify(); self.lift()
+        if res.get("error"):
+            self.log(f"[test] error: {res['error']}")
+            return
+        if not res.get("found"):
+            self.log(f"[test] NOT found (best conf={res.get('confidence', 0):.2f}). "
+                     f"Lower the threshold, re-capture the anchor, or check the region.")
+            return
+        conf = res.get("confidence", 0.0)
+        if res.get("ambiguous"):
+            self.log(f"[test] AMBIGUOUS — best={conf:.2f} vs look-alike="
+                     f"{res.get('second', 0):.2f}. This is your wrong-click risk: "
+                     f"lock a region or use a more distinctive anchor.")
+        else:
+            self.log(f"[test] found (conf={conf:.2f}) — it would click {res.get('center')}")
+        box = res.get("box")
+        if box:
+            self._flash_box(box, ok=not res.get("ambiguous"))
+        elif res.get("center"):
+            cx, cy = res["center"]
+            self._flash_box((cx - 40, cy - 20, cx + 40, cy + 20),
+                            ok=not res.get("ambiguous"))
+
+    def _flash_box(self, box, ok=True) -> None:
+        """Briefly draw a highlight rectangle on screen where it would click."""
+        x1, y1, x2, y2 = box
+        w, h = max(1, x2 - x1), max(1, y2 - y1)
+        color = THEME["ok"] if ok else THEME["warn"]
+        try:
+            ov = tk.Toplevel(self)
+            ov.overrideredirect(True)
+            ov.attributes("-topmost", True)
+            ov.attributes("-alpha", 0.35)
+            ov.geometry(f"{w}x{h}+{x1}+{y1}")
+            ov.configure(bg=color)
+            ov.after(1400, ov.destroy)
+        except Exception as e:
+            self.log(f"[test] (could not draw highlight: {e})")
+
     # -- file --------------------------------------------------------------
     def on_new(self) -> None:
         if self.steps and not messagebox.askyesno(
@@ -547,16 +694,18 @@ class StepEditor(tk.Toplevel):
     def __init__(self, parent, step: dict):
         super().__init__(parent)
         self.title("Edit step")
+        self.configure(bg=THEME["bg"])
         self.transient(parent)
         self.grab_set()
         self.result: dict | None = None
         self._step = dict(step)
         self._vars: dict[str, tk.StringVar] = {}
+        self._parent = parent
 
         action = self._step.get("action", "wait")
         args = self._step.get("args", {}) or {}
         ttk.Label(self, text=f"Action: {action}", padding=(10, 8)).grid(
-            row=0, column=0, columnspan=2, sticky="w")
+            row=0, column=0, columnspan=3, sticky="w")
 
         fields = self._fields_for(action, args)
         for r, (label, key, val) in enumerate(fields, start=1):
@@ -564,14 +713,31 @@ class StepEditor(tk.Toplevel):
                 row=r, column=0, sticky="e")
             var = tk.StringVar(value=str(val))
             self._vars[key] = var
-            ttk.Entry(self, textvariable=var, width=34).grid(
-                row=r, column=1, padx=(0, 10), pady=2)
+            ttk.Entry(self, textvariable=var, width=32).grid(
+                row=r, column=1, padx=(0, 4), pady=2)
+            if key == "region":  # drag-a-box picker
+                ttk.Button(self, text="Pick ▢", width=7,
+                           command=lambda v=var: self._pick_region(v)).grid(
+                    row=r, column=2, padx=(0, 10))
 
         btns = ttk.Frame(self, padding=8)
-        btns.grid(row=len(fields) + 1, column=0, columnspan=2)
-        ttk.Button(btns, text="OK", command=self._ok).pack(side="left", padx=4)
+        btns.grid(row=len(fields) + 1, column=0, columnspan=3)
+        ttk.Button(btns, text="OK", style="Accent.TButton",
+                   command=self._ok).pack(side="left", padx=4)
         ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left")
+        _dark_titlebar(self)
         parent.wait_window(self)
+
+    def _pick_region(self, var: tk.StringVar) -> None:
+        self.withdraw()
+        self._parent.withdraw()
+        try:
+            box = RegionPicker(self._parent).result
+        finally:
+            self._parent.deiconify()
+            self.deiconify(); self.lift(); self.grab_set()
+        if box:
+            var.set(",".join(str(v) for v in box))
 
     def _fields_for(self, action, args):
         if action in ("find_click", "wait_for"):
@@ -761,6 +927,58 @@ class StepEditor(tk.Toplevel):
             messagebox.showerror("Invalid value", str(e), parent=self)
             return
         self.result = out
+        self.destroy()
+
+
+class RegionPicker(tk.Toplevel):
+    """Full virtual-desktop overlay: drag a box, get (left, top, width, height)
+    in screen coordinates (the same space the engine's regions use)."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.result = None
+        import mss
+        with mss.mss() as s:
+            mon = s.monitors[0]  # bounding box of all monitors
+        self._ox, self._oy = mon["left"], mon["top"]
+        self.overrideredirect(True)
+        self.geometry(f'{mon["width"]}x{mon["height"]}+{mon["left"]}+{mon["top"]}')
+        self.attributes("-topmost", True)
+        try:
+            self.attributes("-alpha", 0.30)
+        except tk.TclError:
+            pass
+        self.canvas = tk.Canvas(self, bg="#101018", highlightthickness=0,
+                                cursor="crosshair")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.create_text(mon["width"] // 2, 40, fill="#cdd6f4",
+                                font=("Segoe UI", 16),
+                                text="Drag a box around the area to search  ·  "
+                                     "Esc to cancel")
+        self._sx = self._sy = 0
+        self._rect = None
+        self.canvas.bind("<ButtonPress-1>", self._down)
+        self.canvas.bind("<B1-Motion>", self._drag)
+        self.canvas.bind("<ButtonRelease-1>", self._up)
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.grab_set()
+        self.focus_force()
+        parent.wait_window(self)
+
+    def _down(self, e):
+        self._sx, self._sy = e.x, e.y
+        self._rect = self.canvas.create_rectangle(e.x, e.y, e.x, e.y,
+                                                  outline="#89b4fa", width=2)
+
+    def _drag(self, e):
+        if self._rect:
+            self.canvas.coords(self._rect, self._sx, self._sy, e.x, e.y)
+
+    def _up(self, e):
+        x1, y1 = min(self._sx, e.x), min(self._sy, e.y)
+        x2, y2 = max(self._sx, e.x), max(self._sy, e.y)
+        if (x2 - x1) >= 5 and (y2 - y1) >= 5:
+            self.result = (x1 + self._ox, y1 + self._oy, x2 - x1, y2 - y1)
         self.destroy()
 
 

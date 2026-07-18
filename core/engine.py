@@ -435,21 +435,77 @@ class Engine:
 
     def _locate(self, step: Step, region) -> tuple[int, int] | None:
         """Poll for the anchor until found or timeout. Returns center in frame
-        coords, or None."""
+        coords, or None.
+
+        Refuses an *ambiguous* match (a look-alike scored nearly as high) unless
+        the step opts in with args.allow_ambiguous -- this is the guard against
+        clicking the wrong button. args.multi_scale enables DPI/size-tolerant
+        matching."""
+        a = step.args or {}
+        multi = bool(a.get("multi_scale", False))
+        allow_ambig = bool(a.get("allow_ambiguous", False))
         deadline = time.perf_counter() + step.timeout
         best = 0.0
         while time.perf_counter() < deadline:
             if self.panic.is_set():
                 return None
             frame = self.capture.grab(region)
-            m = self.detector.find(frame, step.target, step.threshold)
+            m = self.detector.find(frame, step.target, step.threshold, multi)
             best = max(best, m.confidence)
+            if m.found and m.ambiguous and not allow_ambig:
+                self.log(f"          AMBIGUOUS: best={m.confidence:.2f} vs "
+                         f"look-alike={m.second:.2f} — refusing to click. "
+                         f"Lock a region or use a more distinctive anchor.")
+                time.sleep(0.05)
+                continue
             if m.found:
                 self.log(f"          found (conf={m.confidence:.2f}) at {m.center}")
                 return m.center
             time.sleep(0.05)  # ~20 checks/sec is plenty for UI
         self.log(f"          NOT found (best conf={best:.2f}, need {step.threshold})")
         return None
+
+    def test_step(self, step: Step, region) -> dict:
+        """Run a single detection step WITHOUT clicking, for the UI 'Test'
+        button. Returns a result dict incl. the match box in SCREEN coords."""
+        a = step.args or {}
+        eff = a.get("region") or region
+        eff = tuple(eff) if eff else None
+        step = replace(step, target=self._expand(step.target))
+        ox, oy = self.capture.region_origin(eff)
+        frame = self.capture.grab(eff)
+        out = {"action": step.action, "found": False, "confidence": 0.0,
+               "ambiguous": False, "second": 0.0, "box": None, "center": None}
+        try:
+            if step.action in ("find_click", "wait_for"):
+                m = self.detector.find(frame, step.target, step.threshold,
+                                       bool(a.get("multi_scale", False)))
+                out.update(found=m.found, confidence=m.confidence,
+                           ambiguous=m.ambiguous, second=m.second)
+                if m.box:
+                    x1, y1, x2, y2 = m.box
+                    out["box"] = (x1 + ox, y1 + oy, x2 + ox, y2 + oy)
+                    out["center"] = (m.center[0] + ox, m.center[1] + oy)
+            elif step.action in ("find_text_click", "wait_for_text"):
+                if self._text_finder is None:
+                    from .ocr import TextFinder
+                    self._text_finder = TextFinder()
+                m = self._text_finder.find(frame, step.target, step.threshold)
+                out.update(found=m.found, confidence=m.confidence)
+                if m.found:
+                    out["center"] = (m.center[0] + ox, m.center[1] + oy)
+            elif step.action in ("find_object_click", "wait_for_object"):
+                det = self._get_object_detector(a.get("model"))
+                if det:
+                    m = det.find(frame, step.target, step.threshold)
+                    out.update(found=m.found, confidence=m.confidence)
+                    if m.found:
+                        out["center"] = (m.center[0] + ox, m.center[1] + oy)
+            else:
+                out["error"] = "not a detection step"
+        except Exception as e:
+            out["error"] = str(e)
+        return out
 
     def _locate_text(self, step: Step, region) -> tuple[int, int] | None:
         """Poll OCR for step.target text until found or timeout."""

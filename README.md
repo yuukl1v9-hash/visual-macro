@@ -119,11 +119,30 @@ python ui/app.py
 - **■ Stop** / **F12** — abort a run instantly.
 - **Step list** — select a row, then **▲/▼** to reorder, **Edit** (or double-click)
   to change a field, **Delete**, or **+ Add** a step by type.
+- **🔍 Test** — select a detection step and Test it: it searches the screen
+  *without* clicking, flashes a box where it *would* click, and logs the
+  confidence — so you can see and fix a bad match before you ever run the macro.
 - **New / Open / Save** — macros are JSON files in `macros/`.
 
 Editing a step opens a small dialog whose fields match the step type — no syntax.
+Fields that take a screen region have a **Pick ▢** button: drag a box on screen
+instead of typing pixel numbers.
 
 Prefer the command line? The recorder and player also run standalone — see below.
+
+### Getting reliable clicks (avoiding the "wrong button")
+
+Template matching clicks the single best match on screen, so two things cause
+wrong clicks — and the app now guards both:
+
+- **Ambiguous matches are refused.** If a look-alike scores nearly as high as
+  the real target, the macro *won't* click; it logs `AMBIGUOUS …` and tells you
+  to narrow it down. Fix it by **locking a region** (Edit → **Pick ▢**) so only
+  the right area is searched, or by re-capturing a more distinctive anchor.
+- **Weak matches are refused** by the threshold. Use **🔍 Test** to read the
+  confidence, then raise the step's threshold (e.g. `0.90`) to reject near-misses.
+- **Different DPI/resolution?** Turn on `multi_scale` in the step's args and it
+  matches the anchor at several sizes.
 
 ## Record a macro (the easy way)
 
