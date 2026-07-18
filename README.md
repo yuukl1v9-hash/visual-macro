@@ -83,6 +83,10 @@ python ui/app.py
   to change a field, **Delete**, or **+ Add** a step by type.
 - **New / Open / Save** — macros are JSON files in `macros/`.
 
+Editing a step opens a small dialog whose fields match the step type — no syntax:
+
+<p align="center"><img src="docs/editor.png" alt="step editor dialog" width="320"></p>
+
 Prefer the command line? The recorder and player also run standalone — see below.
 
 ## Record a macro (the easy way)
