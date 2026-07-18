@@ -39,6 +39,15 @@ THEME = {
 }
 
 
+def _macro_names() -> list[str]:
+    """Saved macro names (filenames without .json) for the call-step dropdown."""
+    try:
+        return sorted(os.path.splitext(f)[0] for f in os.listdir(MACROS)
+                      if f.lower().endswith(".json"))
+    except OSError:
+        return []
+
+
 def _icon_path() -> str | None:
     """Locate icon.ico whether running from source or a PyInstaller bundle."""
     candidates = []
@@ -232,6 +241,16 @@ class App(tk.Tk):
                      arrowcolor=c["text"], bordercolor=c["border"])
         st.configure("TEntry", fieldbackground=c["surface"], foreground=c["text"],
                      bordercolor=c["border"], insertcolor=c["text"])
+        st.configure("TCombobox", fieldbackground=c["surface"], foreground=c["text"],
+                     background=c["surface2"], arrowcolor=c["text"],
+                     bordercolor=c["border"], insertcolor=c["text"])
+        st.map("TCombobox", fieldbackground=[("readonly", c["surface"])],
+               foreground=[("readonly", c["text"])])
+        # the dropdown popup is a classic Listbox — theme it via the option db
+        self.option_add("*TCombobox*Listbox.background", c["surface"])
+        self.option_add("*TCombobox*Listbox.foreground", c["text"])
+        self.option_add("*TCombobox*Listbox.selectBackground", c["accent"])
+        self.option_add("*TCombobox*Listbox.selectForeground", c["bg"])
         st.configure("Treeview", background=c["surface"], fieldbackground=c["surface"],
                      foreground=c["text"], borderwidth=0, rowheight=24)
         st.configure("Treeview.Heading", background=c["surface2"],
@@ -958,8 +977,14 @@ class StepEditor(tk.Toplevel):
                 row=r, column=0, sticky="e")
             var = tk.StringVar(value=str(val))
             self._vars[key] = var
-            ttk.Entry(self, textvariable=var, width=32).grid(
-                row=r, column=1, padx=(0, 4), pady=2)
+            if action == "call" and key == "target":
+                # dropdown of saved macros (editable — you can still type one
+                # you haven't saved yet)
+                ttk.Combobox(self, textvariable=var, values=_macro_names(),
+                             width=30).grid(row=r, column=1, padx=(0, 4), pady=2)
+            else:
+                ttk.Entry(self, textvariable=var, width=32).grid(
+                    row=r, column=1, padx=(0, 4), pady=2)
             if key == "region":  # drag-a-box picker
                 ttk.Button(self, text="Pick ▢", width=7,
                            command=lambda v=var: self._pick_region(v)).grid(

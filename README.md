@@ -302,7 +302,8 @@ macro and `call` it from others — like a function. Build `login.json` once, th
 ```
 
 - `target` is the macro's name (the `.json` filename, with or without extension).
-  In the editor it's the **Macro name** field.
+  In the editor the **Macro name** field is a dropdown of your saved macros
+  (still editable, so you can name one you haven't saved yet).
 - `args.repeat` runs the sub-macro N times (default 1).
 - A sub-macro uses **its own** search `region` if it set one, else the caller's.
   Its anchor images resolve from `assets/` as usual, so a called macro just works.
