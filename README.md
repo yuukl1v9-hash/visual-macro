@@ -23,11 +23,30 @@ moves or the layout shifts.
 > Built for desktop automation — installers, tedious UI workflows, testing your
 > own apps. Not for sending input into online games (that's against their ToS).
 
-## Demo
+## Screenshots
 
-The macro finds each field by sight and drives it — no fixed coordinates:
-
-<p align="center"><img src="docs/demo.gif" alt="visual-macro driving a login form" width="360"></p>
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="docs/demo.gif" alt="playback: driving a login form"><br>
+<sub><b>Playback</b> — finds each field by sight and drives it, no fixed coordinates.</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/record.gif" alt="recording a login flow"><br>
+<sub><b>Recording</b> — steps and the capture log appear live as you act.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<img src="docs/ui.png" alt="the app window"><br>
+<sub><b>The app</b> — toolbar plus an editable, reorderable step list.</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/editor.png" alt="step editor dialog"><br>
+<sub><b>Step editor</b> — fields match the step type; no syntax to learn.</sub>
+</td>
+</tr>
+</table>
 
 ## Status
 
@@ -69,8 +88,6 @@ pip install -r requirements.txt
 
 ## The app
 
-<p align="center"><img src="docs/ui.png" alt="visual-macro app window" width="560"></p>
-
 ```powershell
 python ui/app.py
 ```
@@ -83,15 +100,11 @@ python ui/app.py
   to change a field, **Delete**, or **+ Add** a step by type.
 - **New / Open / Save** — macros are JSON files in `macros/`.
 
-Editing a step opens a small dialog whose fields match the step type — no syntax:
-
-<p align="center"><img src="docs/editor.png" alt="step editor dialog" width="320"></p>
+Editing a step opens a small dialog whose fields match the step type — no syntax.
 
 Prefer the command line? The recorder and player also run standalone — see below.
 
 ## Record a macro (the easy way)
-
-<p align="center"><img src="docs/record.gif" alt="recording a login flow — steps and log appear live" width="560"></p>
 
 ```powershell
 python recorder.py my-macro
