@@ -29,6 +29,8 @@ from pynput import keyboard  # noqa: E402
 
 ASSETS = os.path.join(ROOT, "assets")
 MACROS = os.path.join(ROOT, "macros")
+VERSION = "1.0.0"
+REPO_URL = "https://github.com/yuukl1v9-hash/visual-macro"
 
 # Dark palette (Catppuccin-ish) used across the UI.
 THEME = {
@@ -293,6 +295,9 @@ class App(tk.Tk):
             side="left", padx=(6, 0))
         ttk.Button(filebar, text="Save…", command=self.on_save).pack(
             side="left", padx=(6, 0))
+        about = ttk.Button(filebar, text="ⓘ About", width=8, command=self.on_about)
+        about.pack(side="left", padx=(6, 0))
+        Tooltip(about, f"visual-macro {VERSION} — about & links")
         self.name_lbl = ttk.Label(filebar, text="untitled", style="Dim.TLabel")
         self.name_lbl.pack(side="right")
 
@@ -635,6 +640,49 @@ class App(tk.Tk):
             self.steps[i] = edited
             self._dirty = True
             self.refresh()
+
+    # -- about -------------------------------------------------------------
+    def on_about(self) -> None:
+        dlg = tk.Toplevel(self)
+        dlg.title("About visual-macro")
+        dlg.configure(bg=THEME["bg"])
+        dlg.transient(self)
+        dlg.resizable(False, False)
+        if self._icon:
+            try:
+                dlg.iconbitmap(self._icon)
+            except tk.TclError:
+                pass
+        ttk.Label(dlg, text="visual-macro", font=("Segoe UI", 17, "bold")).pack(
+            padx=28, pady=(20, 0))
+        ttk.Label(dlg, text=f"version {VERSION}", style="Dim.TLabel").pack()
+        ttk.Label(dlg, justify="center",
+                  text="Record & replay desktop tasks.\nSteps are found by image, "
+                       "text (OCR) or an AI model —\nnot fixed coordinates.").pack(
+            padx=28, pady=(12, 8))
+        link = ttk.Label(dlg, text=REPO_URL, foreground=THEME["accent"])
+        link.pack()
+        ttk.Label(dlg, text="MIT License", style="Dim.TLabel").pack(pady=(6, 0))
+
+        row = ttk.Frame(dlg, padding=14)
+        row.pack()
+
+        def copy_link():
+            self.clipboard_clear()
+            self.clipboard_append(REPO_URL)
+            self.log("Repo link copied to clipboard.")
+
+        ttk.Button(row, text="Copy link", command=copy_link).pack(side="left", padx=4)
+        ttk.Button(row, text="Close", style="Accent.TButton",
+                   command=dlg.destroy).pack(side="left")
+        dlg.grab_set()
+        _dark_titlebar(dlg)
+        dlg.update_idletasks()
+        # center over the main window
+        px, py = self.winfo_rootx(), self.winfo_rooty()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        w, h = dlg.winfo_width(), dlg.winfo_height()
+        dlg.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 3}")
 
     # -- test a single detection step -------------------------------------
     DETECTION = {"find_click", "wait_for", "find_text_click", "wait_for_text",
