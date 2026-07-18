@@ -39,6 +39,21 @@ THEME = {
 }
 
 
+def _icon_path() -> str | None:
+    """Locate icon.ico whether running from source or a PyInstaller bundle."""
+    candidates = []
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        candidates += [os.path.join(base, "icon.ico"),
+                       os.path.join(base, "ui", "icon.ico")]
+    candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "icon.ico"))
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
+
+
 def _dark_titlebar(win) -> None:
     """Ask Windows to paint this window's title bar dark (no-op elsewhere)."""
     try:
@@ -148,10 +163,17 @@ class App(tk.Tk):
         self.title("visual-macro")
         self.geometry("700x580")
         self.minsize(640, 470)
+        self._icon = _icon_path()
+        if self._icon:
+            try:
+                self.iconbitmap(self._icon)
+            except tk.TclError:
+                pass
 
         self.steps: list[dict] = []
         self.macro_name = "untitled"
         self.region = None
+        self._dirty = False
 
         self._log_q: "queue.Queue[str]" = queue.Queue()
         self._cmd_q: "queue.Queue" = queue.Queue()  # UI callbacks from workers
@@ -165,8 +187,23 @@ class App(tk.Tk):
         self._start_panic_listener()
         self.after(80, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._bind_shortcuts()
         self.refresh()  # shows the empty-state hint on first launch
         self.log("Ready. Record a task or open a macro.")
+
+    def _bind_shortcuts(self) -> None:
+        self.bind("<Control-s>", lambda e: self.on_save())
+        self.bind("<Control-o>", lambda e: self.on_open())
+        self.bind("<Control-n>", lambda e: self.on_new())
+        self.bind("<F5>", lambda e: self.on_play())
+        self.bind("<Delete>", self._on_delete_key)
+
+    def _on_delete_key(self, _e) -> None:
+        # don't hijack Delete while typing in a field
+        w = self.focus_get()
+        if isinstance(w, (ttk.Entry, tk.Entry, ttk.Spinbox, tk.Spinbox, tk.Text)):
+            return
+        self.on_delete()
 
     # -- theme -------------------------------------------------------------
     def _apply_theme(self) -> None:
@@ -361,7 +398,8 @@ class App(tk.Tk):
             iid = str(min(keep, len(self.steps) - 1))
             self.tree.selection_set(iid)
             self.tree.focus(iid)
-        self.name_lbl.configure(text=self.macro_name)
+        self.name_lbl.configure(
+            text=self.macro_name + ("  ●(unsaved)" if self._dirty else ""))
         self.set_status(f"{len(self.steps)} steps")
         if self.steps:
             self.empty_hint.place_forget()
@@ -531,6 +569,7 @@ class App(tk.Tk):
         if i is None or i == 0:
             return
         self.steps[i - 1], self.steps[i] = self.steps[i], self.steps[i - 1]
+        self._dirty = True
         self.refresh()
         self.tree.selection_set(str(i - 1))
 
@@ -539,6 +578,7 @@ class App(tk.Tk):
         if i is None or i >= len(self.steps) - 1:
             return
         self.steps[i + 1], self.steps[i] = self.steps[i], self.steps[i + 1]
+        self._dirty = True
         self.refresh()
         self.tree.selection_set(str(i + 1))
 
@@ -547,6 +587,7 @@ class App(tk.Tk):
         if i is None:
             return
         del self.steps[i]
+        self._dirty = True
         self.refresh()
 
     def on_add(self) -> None:
@@ -555,6 +596,7 @@ class App(tk.Tk):
             return
         step = _default_step(action)
         self.steps.append(step)
+        self._dirty = True
         self.refresh()
         self.tree.selection_set(str(len(self.steps) - 1))
         # markers have nothing to edit; everything else opens the editor
@@ -568,6 +610,7 @@ class App(tk.Tk):
         edited = StepEditor(self, self.steps[i]).result
         if edited is not None:
             self.steps[i] = edited
+            self._dirty = True
             self.refresh()
 
     # -- test a single detection step -------------------------------------
@@ -641,16 +684,31 @@ class App(tk.Tk):
             self.log(f"[test] (could not draw highlight: {e})")
 
     # -- file --------------------------------------------------------------
+    def _confirm_discard(self) -> bool:
+        """Return True if it's OK to throw away the current macro."""
+        if not self._dirty or not self.steps:
+            return True
+        ans = messagebox.askyesnocancel(
+            "Unsaved changes",
+            "Save changes to this macro before continuing?")
+        if ans is None:        # Cancel
+            return False
+        if ans:                # Yes -> save; proceed only if it actually saved
+            return self.on_save()
+        return True            # No -> discard
+
     def on_new(self) -> None:
-        if self.steps and not messagebox.askyesno(
-                "New macro", "Discard the current steps?"):
+        if not self._confirm_discard():
             return
         self.steps = []
         self.macro_name = "untitled"
         self.region = None
+        self._dirty = False
         self.refresh()
 
     def on_open(self) -> None:
+        if not self._confirm_discard():
+            return
         path = filedialog.askopenfilename(
             initialdir=MACROS, filetypes=[("Macro JSON", "*.json")])
         if path:
@@ -670,10 +728,12 @@ class App(tk.Tk):
             {k: v for k, v in vars(s).items() if not _is_default(k, v)}
             for s in m.steps
         ]
+        self._dirty = False
         self.refresh()
         self.log(f"Opened {os.path.basename(path)} ({len(self.steps)} steps).")
 
-    def on_save(self) -> None:
+    def on_save(self) -> bool:
+        """Returns True if the macro was written, False if cancelled."""
         import json
         default = os.path.join(MACROS, f"{self.macro_name}.json")
         os.makedirs(MACROS, exist_ok=True)
@@ -681,7 +741,7 @@ class App(tk.Tk):
             initialdir=MACROS, initialfile=os.path.basename(default),
             defaultextension=".json", filetypes=[("Macro JSON", "*.json")])
         if not path:
-            return
+            return False
         try:
             repeat = int(self.loop_var.get())
         except ValueError:
@@ -691,8 +751,10 @@ class App(tk.Tk):
                 "region": self.region, "steps": self.steps}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        self._dirty = False
         self.refresh()
         self.log(f"Saved {os.path.basename(path)}.")
+        return True
 
     # -- panic key + shutdown ---------------------------------------------
     def _start_panic_listener(self) -> None:
@@ -705,6 +767,12 @@ class App(tk.Tk):
         self._klistener.start()
 
     def _on_close(self) -> None:
+        if self._running or self._recording:
+            if not messagebox.askyesno(
+                    "Quit", "A macro is still running. Quit anyway?"):
+                return
+        elif not self._confirm_discard():
+            return
         self.panic.set()
         try:
             self._klistener.stop()

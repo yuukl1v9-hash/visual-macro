@@ -19,6 +19,8 @@ echo Installing PyInstaller (first build only)...
 
 echo Building...
 "%PY%" -m PyInstaller --noconfirm --clean --windowed --name visual-macro ^
+    --icon ui\icon.ico ^
+    --add-data "ui\icon.ico;." ^
     --collect-submodules cv2 ^
     --collect-data mss ^
     ui\app.py

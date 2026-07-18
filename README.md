@@ -133,7 +133,10 @@ python ui/app.py
 - **New / Open / Save** — macros are JSON files in `macros/`.
 
 Hover any button for a tooltip, and an empty macro shows a hint on what to do.
-**+ Add** opens a plain-English menu — no need to know the internal step names:
+Keyboard shortcuts: **Ctrl+N/O/S** (new/open/save), **Del** (delete step),
+**F5** (play), **F12** (stop). Unsaved edits are marked, and it asks before
+discarding them on new/open/quit. **+ Add** opens a plain-English menu — no need
+to know the internal step names:
 
 <p align="center"><img src="docs/addmenu.png" alt="the plain-English add-step menu" width="300"></p>
 
