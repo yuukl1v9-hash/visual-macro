@@ -1,8 +1,10 @@
 """visual-macro — desktop UI.
 
-A Tkinter front end over the core engine + recorder. No extra installs (tkinter
-ships with Python). Record a task, see the steps as an editable list, reorder or
-tweak them, then play with an optional loop count. F12 stops a run instantly.
+A CustomTkinter front end (modern dark sidebar) over the core engine + recorder.
+Record a task, see the steps as an editable list, reorder or tweak them, then
+play with an optional loop count / CSV data / a global hotkey. F12 stops a run
+instantly. The step list is a dark-styled ttk.Treeview embedded in the CTk
+window; dialogs (step editor, region picker, hotkeys) are themed ttk.
 
 Run:
     python ui/app.py
@@ -17,6 +19,8 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+import customtkinter as ctk
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
@@ -26,6 +30,9 @@ from core.dpi import set_dpi_aware  # noqa: E402
 import recorder as recorder_mod  # noqa: E402
 
 from pynput import keyboard  # noqa: E402
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
 
 ASSETS = os.path.join(ROOT, "assets")
 MACROS = os.path.join(ROOT, "macros")
@@ -41,6 +48,7 @@ THEME = {
     "border": "#585b70", "text": "#cdd6f4", "subtext": "#a6adc8",
     "accent": "#89b4fa", "accent2": "#b4befe",
     "ok": "#a6e3a1", "warn": "#f9e2af", "err": "#f38ba8",
+    "sidebar": "#181825", "card": "#26263a", "hover": "#3b3b52",
 }
 
 
@@ -173,13 +181,9 @@ class App(tk.Tk):
     def __init__(self):
         set_dpi_aware()  # correct click coords on scaled displays
         super().__init__()
-        try:  # keep the UI readable at 125%/150% scaling
-            self.tk.call("tk", "scaling", max(1.0, self.winfo_fpixels("1i") / 72.0))
-        except tk.TclError:
-            pass
         self.title("visual-macro")
-        self.geometry("700x580")
-        self.minsize(640, 470)
+        self.geometry("940x620")
+        self.minsize(860, 560)
         self._icon = _icon_path()
         if self._icon:
             try:
@@ -228,9 +232,9 @@ class App(tk.Tk):
 
     # -- theme -------------------------------------------------------------
     def _apply_theme(self) -> None:
-        """A dark theme so it doesn't look like a plain Tk dialog."""
+        """Dark ttk styling for the embedded Treeview and the ttk dialogs
+        (StepEditor / HotkeyDialog / RegionPicker). The main window is CTk."""
         c = THEME
-        self.configure(bg=c["bg"])
         st = ttk.Style(self)
         st.theme_use("clam")
         st.configure(".", background=c["bg"], foreground=c["text"],
@@ -274,112 +278,137 @@ class App(tk.Tk):
                      troughcolor=c["bg"], bordercolor=c["bg"], arrowcolor=c["text"])
 
     # -- layout ------------------------------------------------------------
+    def _sidebar_btn(self, parent, text, cmd, accent=False, tip=""):
+        b = ctk.CTkButton(
+            parent, text=text, command=cmd, height=38, corner_radius=8,
+            anchor="w", font=ctk.CTkFont(size=13),
+            fg_color=THEME["accent"] if accent else "transparent",
+            text_color=THEME["bg"] if accent else THEME["text"],
+            hover_color=THEME["accent2"] if accent else THEME["hover"])
+        b.pack(fill="x", padx=12, pady=3)
+        if tip:
+            Tooltip(b, tip)
+        return b
+
     def _build_ui(self) -> None:
-        bar = ttk.Frame(self, padding=(8, 6))
-        bar.pack(fill="x")
-
-        self.btn_record = ttk.Button(bar, text="● Record", command=self.on_record)
-        self.btn_play = ttk.Button(bar, text="▶ Play", command=self.on_play,
-                                   style="Accent.TButton")
-        self.btn_data = ttk.Button(bar, text="▶ Data…", command=self.on_play_data)
-        self.btn_stop = ttk.Button(bar, text="■ Stop", command=self.on_stop,
-                                   state="disabled")
-        self.btn_record.pack(side="left")
-        self.btn_play.pack(side="left", padx=(6, 0))
-        self.btn_data.pack(side="left", padx=(6, 0))
-        self.btn_stop.pack(side="left", padx=(6, 12))
-        Tooltip(self.btn_record, "Do a task by hand once — it records the steps.\n"
-                                 "Press F10 to stop recording.")
-        Tooltip(self.btn_play, "Run the macro. Loop sets how many times.")
-        Tooltip(self.btn_data, "Run the macro once per row of a CSV.\n"
-                               "Each column becomes a ${variable} you can type.")
-        Tooltip(self.btn_stop, "Stop a running macro (or press F12 anytime).")
-
-        ttk.Label(bar, text="Loop:").pack(side="left")
+        c = THEME
         self.loop_var = tk.StringVar(value="1")
-        ttk.Spinbox(bar, from_=0, to=9999, width=5, textvariable=self.loop_var).pack(
-            side="left", padx=(2, 0))
-        ttk.Label(bar, text="(0 = forever)").pack(side="left", padx=(4, 0))
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        filebar = ttk.Frame(self, padding=(8, 0))
-        filebar.pack(fill="x")
-        ttk.Button(filebar, text="New", command=self.on_new).pack(side="left")
-        ttk.Button(filebar, text="Open…", command=self.on_open).pack(
-            side="left", padx=(6, 0))
-        ttk.Button(filebar, text="Save…", command=self.on_save).pack(
-            side="left", padx=(6, 0))
-        hk = ttk.Button(filebar, text="⌨ Hotkeys", width=10,
-                        command=self.on_hotkeys)
-        hk.pack(side="left", padx=(6, 0))
-        Tooltip(hk, "Bind a global hotkey to a saved macro —\n"
-                    "press it from any app to run that macro.")
-        about = ttk.Button(filebar, text="ⓘ About", width=8, command=self.on_about)
-        about.pack(side="left", padx=(6, 0))
-        Tooltip(about, f"visual-macro {VERSION} — about & links")
-        self.name_lbl = ttk.Label(filebar, text="untitled", style="Dim.TLabel")
-        self.name_lbl.pack(side="right")
+        # ---- sidebar -----------------------------------------------------
+        side = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color=c["sidebar"])
+        side.grid(row=0, column=0, sticky="nsw")
+        side.grid_propagate(False)
+        ctk.CTkLabel(side, text="⚡  visual-macro",
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=c["accent"]).pack(pady=(20, 4), padx=12, anchor="w")
+        ctk.CTkLabel(side, text="RUN", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=c["subtext"]).pack(pady=(14, 2), padx=14, anchor="w")
+        self.btn_record = self._sidebar_btn(
+            side, "  ●  Record", self.on_record,
+            tip="Do a task by hand once — it records the steps. F10 to stop.")
+        self.btn_play = self._sidebar_btn(
+            side, "  ▶  Play", self.on_play, accent=True,
+            tip="Run the macro. Loop sets how many times.")
+        self.btn_data = self._sidebar_btn(
+            side, "  ▶  Play with data…", self.on_play_data,
+            tip="Run once per CSV row; columns become ${variables}.")
+        self.btn_stop = self._sidebar_btn(
+            side, "  ■  Stop", self.on_stop, tip="Stop a run (or press F12).")
+        self.btn_stop.configure(state="disabled")
 
-        # step list
-        mid = ttk.Frame(self, padding=(8, 6))
-        mid.pack(fill="both", expand=True)
+        ctk.CTkLabel(side, text="MACRO", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=c["subtext"]).pack(pady=(16, 2), padx=14, anchor="w")
+        self._sidebar_btn(side, "  ✚  New", self.on_new)
+        self._sidebar_btn(side, "  📂  Open…", self.on_open)
+        self._sidebar_btn(side, "  💾  Save…", self.on_save)
 
+        ctk.CTkLabel(side, text="TOOLS", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=c["subtext"]).pack(pady=(16, 2), padx=14, anchor="w")
+        self._sidebar_btn(side, "  ⌨  Hotkeys…", self.on_hotkeys,
+                          tip="Bind a global hotkey to a saved macro.")
+        self._sidebar_btn(side, "  ⓘ  About", self.on_about)
+        ctk.CTkLabel(side, text=f"v{VERSION}", text_color=c["subtext"],
+                     font=ctk.CTkFont(size=11)).pack(side="bottom", pady=12)
+
+        # ---- main --------------------------------------------------------
+        main = ctk.CTkFrame(self, fg_color="transparent")
+        main.grid(row=0, column=1, sticky="nsew", padx=18, pady=16)
+        main.grid_columnconfigure(0, weight=1)
+        main.grid_rowconfigure(2, weight=1)
+
+        header = ctk.CTkFrame(main, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+        self.name_lbl = ctk.CTkLabel(header, text="untitled",
+                                     font=ctk.CTkFont(size=20, weight="bold"))
+        self.name_lbl.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(header, text="Loop").grid(row=0, column=1, padx=(0, 4))
+        ctk.CTkEntry(header, width=56, textvariable=self.loop_var).grid(row=0, column=2)
+        ctk.CTkLabel(header, text="0 = ∞", text_color=c["subtext"]).grid(
+            row=0, column=3, padx=(6, 0))
+        self.status = ctk.CTkLabel(header, text="", fg_color=c["card"],
+                                   corner_radius=12, text_color=c["subtext"],
+                                   font=ctk.CTkFont(size=12), height=28, width=120)
+        self.status.grid(row=0, column=4, padx=(12, 0), ipadx=6)
+
+        # step-edit toolbar
+        toolbar = ctk.CTkFrame(main, fg_color="transparent")
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(12, 8))
+        for text, cmd, tip in [
+            ("✚ Add", self.on_add, "Add a step (plain-English menu)"),
+            ("Edit", self.on_edit, "Edit the selected step (or double-click)"),
+            ("Delete", self.on_delete, "Delete the selected step"),
+            ("▲", self.on_up, "Move up"), ("▼", self.on_down, "Move down"),
+            ("🔍 Test", self.on_test, "Preview where the step would click — no click"),
+        ]:
+            b = ctk.CTkButton(toolbar, text=text, command=cmd, width=64, height=30,
+                              corner_radius=8, fg_color=c["card"],
+                              hover_color=c["hover"], text_color=c["text"])
+            b.pack(side="left", padx=(0, 6))
+            Tooltip(b, tip)
+
+        # step list (ttk.Treeview inside a rounded card)
+        card = ctk.CTkFrame(main, corner_radius=10, fg_color=c["surface"])
+        card.grid(row=2, column=0, sticky="nsew")
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_rowconfigure(0, weight=1)
         cols = ("num", "action", "detail")
-        self.tree = ttk.Treeview(mid, columns=cols, show="headings", height=12)
+        self.tree = ttk.Treeview(card, columns=cols, show="headings")
         self.tree.heading("num", text="#")
         self.tree.heading("action", text="Action")
         self.tree.heading("detail", text="Detail")
-        self.tree.column("num", width=36, anchor="center", stretch=False)
-        self.tree.column("action", width=130, stretch=False)
-        self.tree.column("detail", width=380)
-        self.tree.pack(side="left", fill="both", expand=True)
+        self.tree.column("num", width=40, anchor="center", stretch=False)
+        self.tree.column("action", width=150, stretch=False)
+        self.tree.column("detail", width=420)
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
         self.tree.bind("<Double-1>", lambda e: self.on_edit())
-        self.tree.tag_configure("odd", background=THEME["surface"])
-        self.tree.tag_configure("even", background=THEME["stripe"])
-
-        # empty-state hint shown over the (blank) list
+        self.tree.tag_configure("odd", background=c["surface"])
+        self.tree.tag_configure("even", background=c["stripe"])
         self.empty_hint = tk.Label(
-            self.tree, bg=THEME["surface"], fg=THEME["subtext"],
-            font=("Segoe UI", 11), justify="center",
-            text="No steps yet.\n\n"
-                 "Click  ● Record  to capture a task by doing it once,\n"
-                 "or  + Add  to build one step at a time.")
+            self.tree, bg=c["surface"], fg=c["subtext"], font=("Segoe UI", 11),
+            justify="center",
+            text="No steps yet.\n\nClick  ●  Record  to capture a task,\n"
+                 "or  ✚ Add  to build one step at a time.")
+        csb = ctk.CTkScrollbar(card, command=self.tree.yview)
+        csb.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=6)
+        self.tree.configure(yscrollcommand=csb.set)
 
-        sb = ttk.Scrollbar(mid, orient="vertical", command=self.tree.yview)
-        sb.pack(side="left", fill="y")
-        self.tree.configure(yscrollcommand=sb.set)
-
-        side = ttk.Frame(mid, padding=(6, 0))
-        side.pack(side="left", fill="y")
-        for text, cmd, tip in [
-            ("▲ Up", self.on_up, "Move the selected step up"),
-            ("▼ Down", self.on_down, "Move the selected step down"),
-            ("Edit", self.on_edit, "Edit the selected step (or double-click it)"),
-            ("Delete", self.on_delete, "Delete the selected step"),
-            ("+ Add", self.on_add, "Add a new step (plain-English menu)"),
-            ("🔍 Test", self.on_test, "Preview where the selected step would click —\n"
-                                      "without clicking. Shows a box + confidence."),
-        ]:
-            b = ttk.Button(side, text=text, width=9, command=cmd)
-            b.pack(pady=2)
-            Tooltip(b, tip)
-
-        # log
-        c = THEME
-        logframe = ttk.Frame(self, padding=(8, 4))
-        logframe.pack(fill="both")
-        self.log_txt = tk.Text(logframe, height=8, state="disabled", wrap="word",
-                               font=("Consolas", 9), bg=c["surface"],
-                               fg=c["subtext"], insertbackground=c["text"],
-                               relief="flat", highlightthickness=0,
-                               padx=8, pady=6)
-        self.log_txt.pack(fill="both", expand=True)
+        # log (dark tk.Text inside a card — keeps coloured tags)
+        logcard = ctk.CTkFrame(main, corner_radius=10, fg_color=c["card"], height=150)
+        logcard.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        logcard.grid_propagate(False)
+        logcard.grid_columnconfigure(0, weight=1)
+        logcard.grid_rowconfigure(0, weight=1)
+        self.log_txt = tk.Text(logcard, height=7, state="disabled", wrap="word",
+                               font=("Consolas", 9), bg=c["card"], fg=c["subtext"],
+                               insertbackground=c["text"], relief="flat",
+                               highlightthickness=0, padx=10, pady=8, borderwidth=0)
+        self.log_txt.grid(row=0, column=0, sticky="nsew")
         self.log_txt.tag_configure("ok", foreground=c["ok"])
         self.log_txt.tag_configure("warn", foreground=c["warn"])
         self.log_txt.tag_configure("err", foreground=c["err"])
-
-        self.status = ttk.Label(self, text="", anchor="w", padding=(8, 3),
-                                style="Status.TLabel")
-        self.status.pack(fill="x")
 
     # -- logging (thread-safe) --------------------------------------------
     def log(self, msg: str) -> None:

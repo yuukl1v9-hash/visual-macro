@@ -3,6 +3,7 @@ opencv-python>=4.8      # template matching (the "image recognition")
 numpy>=1.24
 mss>=9.0                # screen capture (cross-platform, easy install)
 pynput>=1.7             # mouse/keyboard control + global hotkeys
+customtkinter>=5.2      # modern dark UI (sidebar, rounded widgets)
 
 # Optional speed upgrade (Windows only). If installed, capture.py uses it
 # automatically for much faster grabs. Safe to skip for an MVP.

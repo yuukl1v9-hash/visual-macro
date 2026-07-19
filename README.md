@@ -434,7 +434,7 @@ visual-macro/
 ├─ train_detector.py# train + export your own model (needs ultralytics)
 ├─ run_ui.bat       # double-click launcher (sets up venv, runs the app)
 ├─ build_exe.bat    # bundle a standalone .exe with PyInstaller
-├─ ui/app.py        # the desktop app: toolbar + step list (Tkinter)
+├─ ui/app.py        # the desktop app: sidebar + step list (CustomTkinter)
 ├─ recorder.py      # record a task by doing it once (F10 to stop)
 ├─ grab_anchor.py   # capture an anchor by dragging a box (manual)
 └─ main.py          # load a macro + F12 panic hotkey (CLI player)
