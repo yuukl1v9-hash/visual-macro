@@ -49,22 +49,22 @@ moves or the layout shifts.
 <table>
 <tr>
 <td width="50%" align="center">
-<img src="docs/demo.gif" alt="playback: driving a login form"><br>
-<sub><b>Playback</b> — finds each field by sight and drives it, no fixed coordinates.</sub>
+<img src="docs/ui.png" alt="the app window"><br>
+<sub><b>The app</b> — modern dark UI: sidebar, editable step list, live log.</sub>
 </td>
 <td width="50%" align="center">
-<img src="docs/record.gif" alt="recording a login flow"><br>
-<sub><b>Recording</b> — steps and the capture log appear live as you act.</sub>
+<img src="docs/demo.gif" alt="playback: driving a login form"><br>
+<sub><b>Playback</b> — finds each field by sight and drives it, no fixed coordinates.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<img src="docs/ui.png" alt="the app window"><br>
-<sub><b>The app</b> — toolbar plus an editable, reorderable step list.</sub>
-</td>
-<td width="50%" align="center">
 <img src="docs/editor.png" alt="step editor dialog"><br>
 <sub><b>Step editor</b> — fields match the step type; no syntax to learn.</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/addmenu.png" alt="add-step menu"><br>
+<sub><b>Add step</b> — a plain-English menu; no need to know the step names.</sub>
 </td>
 </tr>
 </table>
