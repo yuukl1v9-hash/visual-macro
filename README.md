@@ -144,6 +144,24 @@ Editing a step opens a small dialog whose fields match the step type — no synt
 Fields that take a screen region have a **Pick ▢** button: drag a box on screen
 instead of typing pixel numbers.
 
+### Data-driven runs (▶ Data…)
+
+Run a macro **once per row of a CSV**, with each column exposed as a `${variable}`
+— batch/"mail-merge" automation. Click **▶ Data…**, pick a CSV, and confirm.
+
+Given `people.csv`:
+
+```csv
+name,email
+Alice,alice@example.com
+Bob,bob@example.com
+```
+
+a macro whose steps `type ${name}` and `type ${email}` runs twice, filling
+Alice's details, then Bob's. Great for filling a form from a spreadsheet,
+renaming files from a list, or any repeat-with-different-values task. Variables
+are re-seeded fresh each row (no leakage), and **F12** still stops everything.
+
 Prefer the command line? The recorder and player also run standalone — see below.
 
 ### Getting reliable clicks (avoiding the "wrong button")

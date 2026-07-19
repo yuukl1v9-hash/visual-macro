@@ -84,9 +84,11 @@ class Engine:
         self._step_no = 1
 
     # -- public ------------------------------------------------------------
-    def run(self, macro: Macro) -> bool:
+    def run(self, macro: Macro, initial_vars: dict | None = None) -> bool:
         self.log(f"[engine] running '{macro.name}' (capture={self.capture.backend})")
-        self._vars = {}  # fresh variables per run (persist across repeats)
+        # fresh variables per run (persist across repeats); a data-driven run
+        # seeds them from the current CSV row so ${column} substitutes per row
+        self._vars = {str(k): str(v) for k, v in (initial_vars or {}).items()}
         # Compile the flat if/else/end_if step list into nested blocks once.
         program, _ = self._parse(macro.steps, 0, set())
         loops = macro.repeat if macro.repeat > 0 else 1_000_000

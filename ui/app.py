@@ -272,14 +272,18 @@ class App(tk.Tk):
         self.btn_record = ttk.Button(bar, text="● Record", command=self.on_record)
         self.btn_play = ttk.Button(bar, text="▶ Play", command=self.on_play,
                                    style="Accent.TButton")
+        self.btn_data = ttk.Button(bar, text="▶ Data…", command=self.on_play_data)
         self.btn_stop = ttk.Button(bar, text="■ Stop", command=self.on_stop,
                                    state="disabled")
         self.btn_record.pack(side="left")
         self.btn_play.pack(side="left", padx=(6, 0))
+        self.btn_data.pack(side="left", padx=(6, 0))
         self.btn_stop.pack(side="left", padx=(6, 12))
         Tooltip(self.btn_record, "Do a task by hand once — it records the steps.\n"
                                  "Press F10 to stop recording.")
         Tooltip(self.btn_play, "Run the macro. Loop sets how many times.")
+        Tooltip(self.btn_data, "Run the macro once per row of a CSV.\n"
+                               "Each column becomes a ${variable} you can type.")
         Tooltip(self.btn_stop, "Stop a running macro (or press F12 anytime).")
 
         ttk.Label(bar, text="Loop:").pack(side="left")
@@ -581,6 +585,70 @@ class App(tk.Tk):
         self.btn_stop.configure(state="disabled")
         self.set_status(f"{len(self.steps)} steps")
 
+    def on_play_data(self) -> None:
+        """Run the macro once per row of a CSV; each column becomes a ${var}."""
+        if self._running or self._recording:
+            return
+        if not self.steps:
+            messagebox.showinfo("Nothing to play", "This macro has no steps yet.")
+            return
+        path = filedialog.askopenfilename(
+            title="Choose a CSV — one run per row, columns become ${variables}",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            import csv
+            with open(path, "r", encoding="utf-8-sig", newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception as e:
+            messagebox.showerror("Could not read CSV", str(e))
+            return
+        if not rows:
+            messagebox.showinfo("Empty", "That CSV has no data rows.")
+            return
+        cols = ", ".join(f"${{{c}}}" for c in rows[0].keys() if c)
+        if not messagebox.askyesno(
+                "Run with data",
+                f"Run '{self.macro_name}' {len(rows)} times — once per row?\n\n"
+                f"Columns available as variables:\n{cols}\n\n"
+                "Make sure your target app is ready. F12 stops."):
+            return
+
+        try:
+            repeat = int(self.loop_var.get())
+        except ValueError:
+            repeat = 1
+        region = tuple(self.region) if self.region else None
+        step_dicts = self.steps
+
+        self.panic.clear()
+        self._running = True
+        self._set_busy(True)
+        self.btn_stop.configure(state="normal")
+        self.set_status(f"Playing data ×{len(rows)}…  (F12 or Stop to abort)")
+
+        def worker():
+            done = 0
+            try:
+                engine = Engine(assets_dir=ASSETS, panic=self.panic, log=self.log)
+                macro = Macro(name=self.macro_name,
+                              steps=[Step(**s) for s in step_dicts],
+                              repeat=repeat, region=region)
+                for i, row in enumerate(rows, 1):
+                    if self.panic.is_set():
+                        break
+                    self.log(f"[data] row {i}/{len(rows)}: {dict(row)}")
+                    engine.run(macro, initial_vars=row)
+                    done = i
+            except Exception as e:
+                self.post(lambda e=e: self.log(f"Data run error: {e}"))
+            finally:
+                self.post(lambda: self.log(f"[data] finished {done}/{len(rows)} rows."))
+                self.post(self._after_play)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def on_stop(self) -> None:
         if self._running:
             self.panic.set()
@@ -590,6 +658,7 @@ class App(tk.Tk):
         state = "disabled" if busy else "normal"
         self.btn_record.configure(state=state)
         self.btn_play.configure(state=state)
+        self.btn_data.configure(state=state)
 
     # -- edit operations ---------------------------------------------------
     def on_up(self) -> None:
