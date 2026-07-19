@@ -42,14 +42,28 @@ HOTKEYS_FILE = os.path.join(ROOT, "hotkeys.json")
 _MODS = {"ctrl", "alt", "shift", "win", "cmd"}
 
 # Dark palette (Catppuccin-ish) used across the UI.
-THEME = {
+DARK = {
     "bg": "#1e1e2e", "surface": "#313244", "surface2": "#45475a",
     "stripe": "#2a2a3a",  # subtle alternate row shade
     "border": "#585b70", "text": "#cdd6f4", "subtext": "#a6adc8",
     "accent": "#89b4fa", "accent2": "#b4befe",
     "ok": "#a6e3a1", "warn": "#f9e2af", "err": "#f38ba8",
     "sidebar": "#181825", "card": "#26263a", "hover": "#3b3b52",
+    "tip_bg": "#11111b", "tip_fg": "#cdd6f4",
 }
+LIGHT = {
+    "bg": "#eff1f5", "surface": "#ffffff", "surface2": "#e6e9ef",
+    "stripe": "#f5f6f9",
+    "border": "#bcc0cc", "text": "#1e2030", "subtext": "#5c5f77",
+    "accent": "#2563eb", "accent2": "#1d4ed8",
+    "ok": "#2e7d32", "warn": "#a66300", "err": "#c0362c",
+    "sidebar": "#e2e4ec", "card": "#ffffff", "hover": "#d6d9e4",
+    "tip_bg": "#1e1e2e", "tip_fg": "#eff1f5",
+}
+# Active palette — mutated in place on toggle so every THEME[...] lookup (read
+# at build/open time) picks up the new colours.
+THEME = dict(DARK)
+SETTINGS_FILE = os.path.join(ROOT, "settings.json")
 
 
 def _macro_names() -> list[str]:
@@ -202,6 +216,10 @@ class App(tk.Tk):
         self._running = False
         self._recording = False
 
+        self._appearance = self._load_appearance()  # "dark" / "light"
+        THEME.clear()
+        THEME.update(DARK if self._appearance == "dark" else LIGHT)
+        ctk.set_appearance_mode(self._appearance)
         self._apply_theme()
         self._build_ui()
         _dark_titlebar(self)
@@ -215,6 +233,38 @@ class App(tk.Tk):
         self._bind_shortcuts()
         self.refresh()  # shows the empty-state hint on first launch
         self.log("Ready. Record a task or open a macro.")
+
+    # -- appearance (light / dark) ----------------------------------------
+    def _load_appearance(self) -> str:
+        try:
+            import json
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                m = json.load(f).get("appearance", "dark")
+            return m if m in ("dark", "light") else "dark"
+        except (OSError, ValueError):
+            return "dark"
+
+    def _save_appearance(self) -> None:
+        import json
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump({"appearance": self._appearance}, f, indent=2)
+        except OSError:
+            pass
+
+    def _set_appearance(self, mode: str) -> None:
+        if mode == self._appearance:
+            return
+        self._appearance = mode
+        THEME.clear()
+        THEME.update(DARK if mode == "dark" else LIGHT)
+        ctk.set_appearance_mode(mode)
+        self._apply_theme()
+        self._container.destroy()   # rebuild content with the new palette
+        self._build_ui()
+        self.refresh()
+        self._save_appearance()
+        self.log(f"Switched to {mode} mode.")
 
     def _bind_shortcuts(self) -> None:
         self.bind("<Control-s>", lambda e: self.on_save())
@@ -292,12 +342,19 @@ class App(tk.Tk):
 
     def _build_ui(self) -> None:
         c = THEME
-        self.loop_var = tk.StringVar(value="1")
-        self.grid_columnconfigure(1, weight=1)
+        if not hasattr(self, "loop_var"):      # preserve value across re-theme
+            self.loop_var = tk.StringVar(value="1")
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
+        # everything lives in a container so a theme switch can rebuild it
+        self._container = ctk.CTkFrame(self, corner_radius=0, fg_color=c["bg"])
+        self._container.grid(row=0, column=0, sticky="nsew")
+        self._container.grid_columnconfigure(1, weight=1)
+        self._container.grid_rowconfigure(0, weight=1)
 
         # ---- sidebar -----------------------------------------------------
-        side = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color=c["sidebar"])
+        side = ctk.CTkFrame(self._container, width=200, corner_radius=0,
+                            fg_color=c["sidebar"])
         side.grid(row=0, column=0, sticky="nsw")
         side.grid_propagate(False)
         ctk.CTkLabel(side, text="⚡  visual-macro",
@@ -330,10 +387,16 @@ class App(tk.Tk):
                           tip="Bind a global hotkey to a saved macro.")
         self._sidebar_btn(side, "  ⓘ  About", self.on_about)
         ctk.CTkLabel(side, text=f"v{VERSION}", text_color=c["subtext"],
-                     font=ctk.CTkFont(size=11)).pack(side="bottom", pady=12)
+                     font=ctk.CTkFont(size=11)).pack(side="bottom", pady=(4, 12))
+        theme_seg = ctk.CTkSegmentedButton(
+            side, values=["🌙 Dark", "☀ Light"],
+            command=lambda v: self._set_appearance(
+                "dark" if v.startswith("🌙") else "light"))
+        theme_seg.set("🌙 Dark" if self._appearance == "dark" else "☀ Light")
+        theme_seg.pack(side="bottom", padx=12, pady=(0, 4), fill="x")
 
         # ---- main --------------------------------------------------------
-        main = ctk.CTkFrame(self, fg_color="transparent")
+        main = ctk.CTkFrame(self._container, fg_color="transparent")
         main.grid(row=0, column=1, sticky="nsew", padx=18, pady=16)
         main.grid_columnconfigure(0, weight=1)
         main.grid_rowconfigure(2, weight=1)
@@ -1165,7 +1228,7 @@ class Tooltip:
         self.tip.overrideredirect(True)
         self.tip.attributes("-topmost", True)
         self.tip.geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.text, bg="#11111b", fg="#cdd6f4",
+        tk.Label(self.tip, text=self.text, bg=THEME["tip_bg"], fg=THEME["tip_fg"],
                  font=("Segoe UI", 9), padx=6, pady=3, relief="solid", bd=1,
                  justify="left").pack()
 
