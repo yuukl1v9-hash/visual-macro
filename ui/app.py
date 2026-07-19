@@ -31,6 +31,8 @@ ASSETS = os.path.join(ROOT, "assets")
 MACROS = os.path.join(ROOT, "macros")
 VERSION = "1.0.0"
 REPO_URL = "https://github.com/yuukl1v9-hash/visual-macro"
+HOTKEYS_FILE = os.path.join(ROOT, "hotkeys.json")
+_MODS = {"ctrl", "alt", "shift", "win", "cmd"}
 
 # Dark palette (Catppuccin-ish) used across the UI.
 THEME = {
@@ -200,6 +202,10 @@ class App(tk.Tk):
         self._build_ui()
         _dark_titlebar(self)
         self._start_panic_listener()
+        self._hotkeys: dict[str, str] = {}   # "ctrl+alt+1" -> macro file path
+        self._hk_listener = None
+        self._load_hotkeys()
+        self._restart_hotkeys()
         self.after(80, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._bind_shortcuts()
@@ -302,6 +308,11 @@ class App(tk.Tk):
             side="left", padx=(6, 0))
         ttk.Button(filebar, text="Save…", command=self.on_save).pack(
             side="left", padx=(6, 0))
+        hk = ttk.Button(filebar, text="⌨ Hotkeys", width=10,
+                        command=self.on_hotkeys)
+        hk.pack(side="left", padx=(6, 0))
+        Tooltip(hk, "Bind a global hotkey to a saved macro —\n"
+                    "press it from any app to run that macro.")
         about = ttk.Button(filebar, text="ⓘ About", width=8, command=self.on_about)
         about.pack(side="left", padx=(6, 0))
         Tooltip(about, f"visual-macro {VERSION} — about & links")
@@ -565,11 +576,15 @@ class App(tk.Tk):
             repeat=repeat,
             region=tuple(self.region) if self.region else None,
         )
+        self._run_macro(macro, "Playing…  (F12 or Stop to abort)")
+
+    def _run_macro(self, macro, status: str) -> None:
+        """Shared play path used by ▶ Play and by global hotkeys."""
         self.panic.clear()
         self._running = True
         self._set_busy(True)
         self.btn_stop.configure(state="normal")
-        self.set_status("Playing…  (F12 or Stop to abort)")
+        self.set_status(status)
 
         def worker():
             try:
@@ -607,6 +622,85 @@ class App(tk.Tk):
         self._set_busy(False)
         self.btn_stop.configure(state="disabled")
         self.set_status(f"{len(self.steps)} steps")
+
+    # -- global hotkeys ----------------------------------------------------
+    @staticmethod
+    def _to_pynput_hotkey(hk: str) -> str:
+        """'ctrl+alt+1' -> '<ctrl>+<alt>+1' (pynput GlobalHotKeys format)."""
+        parts = []
+        for tok in hk.lower().replace(" ", "").split("+"):
+            if not tok:
+                continue
+            if tok in _MODS or (tok.startswith("f") and tok[1:].isdigit()) \
+                    or len(tok) > 1:
+                parts.append(f"<{tok}>")
+            else:
+                parts.append(tok)
+        return "+".join(parts)
+
+    def _load_hotkeys(self) -> None:
+        try:
+            import json
+            with open(HOTKEYS_FILE, "r", encoding="utf-8") as f:
+                self._hotkeys = dict(json.load(f))
+        except (OSError, ValueError):
+            self._hotkeys = {}
+
+    def _save_hotkeys(self) -> None:
+        import json
+        try:
+            with open(HOTKEYS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._hotkeys, f, indent=2)
+        except OSError as e:
+            self.log(f"Could not save hotkeys: {e}")
+
+    def _restart_hotkeys(self) -> None:
+        """(Re)start the background global-hotkey listener from self._hotkeys."""
+        if self._hk_listener is not None:
+            try:
+                self._hk_listener.stop()
+            except Exception:
+                pass
+            self._hk_listener = None
+        if not self._hotkeys:
+            return
+        mapping = {}
+        for hk, path in self._hotkeys.items():
+            try:
+                combo = self._to_pynput_hotkey(hk)
+                mapping[combo] = (lambda p=path: self.post(
+                    lambda: self._hotkey_fire(p)))
+            except Exception as e:
+                self.log(f"Bad hotkey '{hk}': {e}")
+        if not mapping:
+            return
+        try:
+            self._hk_listener = keyboard.GlobalHotKeys(mapping)
+            self._hk_listener.daemon = True
+            self._hk_listener.start()
+            self.log(f"Global hotkeys active: {', '.join(self._hotkeys)}")
+        except Exception as e:
+            self.log(f"Could not start hotkeys: {e}")
+
+    def _hotkey_fire(self, path: str) -> None:
+        """A bound hotkey was pressed — play that macro file (if not busy)."""
+        if self._running or self._recording:
+            self.log("Hotkey ignored — already running.")
+            return
+        if not os.path.exists(path):
+            self.log(f"Hotkey macro missing: {path}")
+            return
+        try:
+            macro = Macro.load(path)
+        except Exception as e:
+            self.log(f"Hotkey load failed: {e}")
+            return
+        name = os.path.basename(path)
+        self.log(f"[hotkey] playing {name}")
+        self._run_macro(macro, f"Playing {name} (hotkey)…  (F12 to abort)")
+
+    def on_hotkeys(self) -> None:
+        HotkeyDialog(self)
 
     def on_play_data(self) -> None:
         """Run the macro once per row of a CSV; each column becomes a ${var}."""
@@ -938,10 +1032,13 @@ class App(tk.Tk):
         elif not self._confirm_discard():
             return
         self.panic.set()
-        try:
-            self._klistener.stop()
-        except Exception:
-            pass
+        for lst in (getattr(self, "_klistener", None),
+                    getattr(self, "_hk_listener", None)):
+            try:
+                if lst is not None:
+                    lst.stop()
+            except Exception:
+                pass
         self.destroy()
 
 
@@ -1411,6 +1508,96 @@ class RegionPicker(tk.Toplevel):
         if (x2 - x1) >= 5 and (y2 - y1) >= 5:
             self.result = (x1 + self._ox, y1 + self._oy, x2 - x1, y2 - y1)
         self.destroy()
+
+
+class HotkeyDialog(tk.Toplevel):
+    """Bind global hotkeys to saved macros. Persists to hotkeys.json and
+    restarts the app's background listener on every change."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("Global hotkeys")
+        self.configure(bg=THEME["bg"])
+        self.transient(app)
+        self.grab_set()
+        self._pick = tk.StringVar(value="")  # chosen macro path
+
+        ttk.Label(self, text="Press a hotkey from any app to run a macro.",
+                  padding=(12, 10)).grid(row=0, column=0, columnspan=3, sticky="w")
+
+        self.lb = tk.Listbox(self, width=52, height=7, activestyle="none",
+                             bg=THEME["surface"], fg=THEME["text"],
+                             selectbackground=THEME["accent"],
+                             selectforeground=THEME["bg"], relief="flat",
+                             highlightthickness=0, font=("Consolas", 10))
+        self.lb.grid(row=1, column=0, columnspan=3, padx=12, sticky="we")
+
+        ttk.Button(self, text="Remove selected", command=self._remove).grid(
+            row=2, column=0, columnspan=3, pady=(6, 10))
+
+        ttk.Label(self, text="New:  hotkey", padding=(12, 2)).grid(
+            row=3, column=0, sticky="e")
+        self.hk_var = tk.StringVar(value="ctrl+alt+1")
+        ttk.Entry(self, textvariable=self.hk_var, width=16).grid(
+            row=3, column=1, sticky="w")
+        ttk.Button(self, text="Pick macro…", command=self._choose).grid(
+            row=3, column=2, padx=(0, 10))
+        self.pick_lbl = ttk.Label(self, text="(no macro chosen)",
+                                  style="Dim.TLabel", padding=(12, 0))
+        self.pick_lbl.grid(row=4, column=0, columnspan=3, sticky="w")
+
+        btns = ttk.Frame(self, padding=10)
+        btns.grid(row=5, column=0, columnspan=3)
+        ttk.Button(btns, text="Add binding", style="Accent.TButton",
+                   command=self._add).pack(side="left", padx=4)
+        ttk.Button(btns, text="Close", command=self.destroy).pack(side="left")
+
+        _dark_titlebar(self)
+        self._refresh()
+
+    def _refresh(self):
+        self.lb.delete(0, "end")
+        self._keys = list(self.app._hotkeys.keys())
+        for hk in self._keys:
+            self.lb.insert("end", f"{hk:<18}  →  "
+                           f"{os.path.basename(self.app._hotkeys[hk])}")
+        if not self._keys:
+            self.lb.insert("end", "(no hotkeys yet)")
+
+    def _choose(self):
+        p = filedialog.askopenfilename(
+            initialdir=MACROS, filetypes=[("Macro JSON", "*.json")], parent=self)
+        if p:
+            self._pick.set(p)
+            self.pick_lbl.configure(text=os.path.basename(p))
+
+    def _add(self):
+        hk = self.hk_var.get().strip().lower()
+        path = self._pick.get()
+        if not hk:
+            messagebox.showerror("Hotkey", "Type a hotkey, e.g. ctrl+alt+1.",
+                                 parent=self)
+            return
+        if not path:
+            messagebox.showerror("Hotkey", "Pick a macro first.", parent=self)
+            return
+        self.app._hotkeys[hk] = path
+        self.app._save_hotkeys()
+        self.app._restart_hotkeys()
+        self._pick.set("")
+        self.pick_lbl.configure(text="(no macro chosen)")
+        self._refresh()
+
+    def _remove(self):
+        sel = self.lb.curselection()
+        if not sel or not self._keys:
+            return
+        hk = self._keys[sel[0]]
+        self.app._hotkeys.pop(hk, None)
+        self.app._save_hotkeys()
+        self.app._restart_hotkeys()
+        self._refresh()
 
 
 def main():

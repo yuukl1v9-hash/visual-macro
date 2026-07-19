@@ -162,6 +162,15 @@ Alice's details, then Bob's. Great for filling a form from a spreadsheet,
 renaming files from a list, or any repeat-with-different-values task. Variables
 are re-seeded fresh each row (no leakage), and **F12** still stops everything.
 
+### Global hotkeys (⌨ Hotkeys)
+
+Bind a keyboard shortcut to a saved macro and fire it **from any app**, AHK-style
+— the app doesn't need focus. Click **⌨ Hotkeys**, type a combo (e.g.
+`ctrl+alt+1`), pick a macro file, **Add binding**. Bindings persist in
+`hotkeys.json` and re-arm every launch. A background listener runs whenever the
+app is open; pressing a bound key plays that macro (ignored if one's already
+running). `F12` still aborts.
+
 Prefer the command line? The recorder and player also run standalone — see below.
 
 ### Getting reliable clicks (avoiding the "wrong button")
