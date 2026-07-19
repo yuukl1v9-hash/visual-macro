@@ -66,12 +66,17 @@ class Engine:
         panic: threading.Event | None = None,
         log: Callable[[str], None] = print,
         models_dir: str | None = None,
+        ask_fn: Callable[[str, str], "str | None"] | None = None,
     ):
         self.capture = Capture()
         self.detector = Detector(assets_dir)
         self.actuator = Actuator()
         self.panic = panic or threading.Event()
         self.log = log
+        # how an `ask` step gets a value: (prompt, default) -> str or None
+        # (None = user cancelled). Defaults to returning the default value so
+        # headless/GUI-less runs don't block.
+        self.ask_fn = ask_fn
         # models/ and macros/ live beside assets/ by default
         root = os.path.dirname(os.path.abspath(assets_dir))
         self.models_dir = models_dir or os.path.join(root, "models")
@@ -371,6 +376,17 @@ class Engine:
         if step.action == "set":  # target = var name (NOT expanded)
             self._set_var(step.target, a.get("op", "assign"),
                           self._expand(str(a.get("value", ""))))
+            return True
+
+        if step.action == "ask":  # pause and prompt the user -> variable
+            prompt = self._expand(a.get("message", "") or "Enter a value:")
+            default = self._expand(str(a.get("default", "")))
+            val = self.ask_fn(prompt, default) if self.ask_fn else default
+            if val is None:            # cancelled
+                self.log("[ask] cancelled")
+                return False           # on_fail handles it (abort by default)
+            self._vars[step.target] = val
+            self.log(f"[ask] {step.target} = {val!r}")
             return True
 
         if step.action == "read_text":  # OCR a region into a variable

@@ -249,6 +249,7 @@ A macro is a plain JSON file in `macros/` plus a folder of anchor PNGs in
 | `break` / `continue` | exit / skip to next iteration of the enclosing loop | — |
 | `call` | run another saved macro as a subroutine | `target` (macro name), `args: {repeat}` |
 | `set` | assign a variable (or add/sub/mul/div a number) | `target` (var), `args: {op, value}` |
+| `ask` | pause and prompt you for a value → variable | `target` (var), `args: {message, default}` |
 | `read_text` | OCR a region and store the text in a variable | `target` (var), `args: {region}` |
 
 `on_fail` per step: `"abort"` (default), `"skip"`, or `"retry"`.

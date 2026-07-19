@@ -161,6 +161,9 @@ def describe(step: dict) -> tuple[str, str]:
                            else f"{name} {op} {val}")
     if a == "read_text":
         return "Read text", f'-> {step.get("target", "")}'
+    if a == "ask":
+        msg = args.get("message", "")
+        return "Ask", f'{step.get("target", "")} — "{msg}"'
     return a, str(step)
 
 
@@ -570,7 +573,8 @@ class App(tk.Tk):
 
         def worker():
             try:
-                engine = Engine(assets_dir=ASSETS, panic=self.panic, log=self.log)
+                engine = Engine(assets_dir=ASSETS, panic=self.panic, log=self.log,
+                                ask_fn=self._ask)
                 engine.run(macro)
             except Exception as e:
                 self.post(lambda e=e: self.log(f"Play error: {e}"))
@@ -578,6 +582,25 @@ class App(tk.Tk):
                 self.post(self._after_play)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _ask(self, prompt: str, default: str = "") -> "str | None":
+        """Called from the play worker thread: show an input dialog on the Tk
+        main thread and block the worker until the user answers (or F12)."""
+        result = {}
+        done = threading.Event()
+
+        def show():
+            try:
+                result["v"] = simpledialog.askstring(
+                    "Macro input", prompt, initialvalue=default, parent=self)
+            finally:
+                done.set()
+
+        self.post(show)
+        while not done.wait(0.2):        # yield so F12 can break the wait
+            if self.panic.is_set():
+                return None
+        return result.get("v")
 
     def _after_play(self) -> None:
         self._running = False
@@ -631,7 +654,8 @@ class App(tk.Tk):
         def worker():
             done = 0
             try:
-                engine = Engine(assets_dir=ASSETS, panic=self.panic, log=self.log)
+                engine = Engine(assets_dir=ASSETS, panic=self.panic, log=self.log,
+                                ask_fn=self._ask)
                 macro = Macro(name=self.macro_name,
                               steps=[Step(**s) for s in step_dicts],
                               repeat=repeat, region=region)
@@ -963,6 +987,9 @@ def _default_step(action: str) -> dict:
         return {"action": "call", "target": "", "args": {"repeat": 1}}
     if action == "set":
         return {"action": "set", "target": "", "args": {"op": "assign", "value": ""}}
+    if action == "ask":
+        return {"action": "ask", "target": "",
+                "args": {"message": "Enter a value:", "default": ""}}
     if action == "read_text":
         return {"action": "read_text", "target": "", "threshold": 0.30}
     return {"action": "wait", "args": {"seconds": 1.0}}
@@ -1000,6 +1027,7 @@ FRIENDLY_STEPS = [
     ("Skip to the next loop pass", "continue"),
     ("—  Advanced  —", None),
     ("Set a variable", "set"),
+    ("Ask me for a value (prompt)", "ask"),
     ("Read screen text into a variable", "read_text"),
     ("Run another saved macro", "call"),
 ]
@@ -1193,6 +1221,11 @@ class StepEditor(tk.Toplevel):
             return [("Variable name", "target", self._step.get("target", "")),
                     ("Op (assign/add/sub/mul/div)", "op", args.get("op", "assign")),
                     ("Value (supports ${var})", "value", args.get("value", ""))]
+        if action == "ask":
+            return [("Store in variable", "target", self._step.get("target", "")),
+                    ("Prompt message", "message",
+                     args.get("message", "Enter a value:")),
+                    ("Default (optional)", "default", args.get("default", ""))]
         if action == "read_text":
             return [("Store in variable", "target", self._step.get("target", "")),
                     ("Min conf 0-1", "threshold", self._step.get("threshold", 0.30)),
@@ -1301,6 +1334,13 @@ class StepEditor(tk.Toplevel):
                 if op not in ("assign", "add", "sub", "mul", "div"):
                     raise ValueError("Op must be assign/add/sub/mul/div")
                 out["args"] = {"op": op, "value": v.get("value", "")}
+            elif action == "ask":
+                out["target"] = v.get("target", "").strip()
+                args_out = {"message": v.get("message", "").strip()
+                            or "Enter a value:"}
+                if v.get("default", "").strip():
+                    args_out["default"] = v["default"]
+                out["args"] = args_out
             elif action == "read_text":
                 out["target"] = v.get("target", "").strip()
                 out["threshold"] = float(v.get("threshold", 0.30) or 0.30)
