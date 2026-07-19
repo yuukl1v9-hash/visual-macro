@@ -142,9 +142,9 @@ python ui/app.py
   confidence — so you can see and fix a bad match before you ever run the macro.
 - **New / Open / Save** — macros are JSON files in `macros/`.
 
-A **🌙 Dark / ☀ Light** toggle sits at the bottom of the sidebar; your choice is
-remembered between launches. Hover any button for a tooltip, and an empty macro
-shows a hint on what to do.
+A **🌙 Dark / ☀ Light** toggle sits at the bottom of the sidebar; your theme
+choice and the **window size/position** are remembered between launches. Hover
+any button for a tooltip, and an empty macro shows a hint on what to do.
 Keyboard shortcuts: **Ctrl+N/O/S** (new/open/save), **Del** (delete step),
 **F5** (play), **F12** (stop). Unsaved edits are marked, and it asks before
 discarding them on new/open/quit. **+ Add** opens a plain-English menu — no need

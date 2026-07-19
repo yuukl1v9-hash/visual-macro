@@ -216,7 +216,16 @@ class App(tk.Tk):
         self._running = False
         self._recording = False
 
-        self._appearance = self._load_appearance()  # "dark" / "light"
+        self._settings = self._read_settings()
+        self._appearance = self._settings.get("appearance", "dark")
+        if self._appearance not in ("dark", "light"):
+            self._appearance = "dark"
+        geo = self._settings.get("geometry")
+        if geo:                                  # restore saved size + position
+            try:
+                self.geometry(geo)
+            except tk.TclError:
+                pass
         THEME.clear()
         THEME.update(DARK if self._appearance == "dark" else LIGHT)
         ctk.set_appearance_mode(self._appearance)
@@ -235,20 +244,25 @@ class App(tk.Tk):
         self.log("Ready. Record a task or open a macro.")
 
     # -- appearance (light / dark) ----------------------------------------
-    def _load_appearance(self) -> str:
+    def _read_settings(self) -> dict:
         try:
             import json
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                m = json.load(f).get("appearance", "dark")
-            return m if m in ("dark", "light") else "dark"
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
         except (OSError, ValueError):
-            return "dark"
+            return {}
 
-    def _save_appearance(self) -> None:
+    def _save_settings(self) -> None:
         import json
+        self._settings["appearance"] = self._appearance
+        try:
+            self._settings["geometry"] = self.geometry()  # "WxH+X+Y"
+        except tk.TclError:
+            pass
         try:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-                json.dump({"appearance": self._appearance}, f, indent=2)
+                json.dump(self._settings, f, indent=2)
         except OSError:
             pass
 
@@ -263,7 +277,7 @@ class App(tk.Tk):
         self._container.destroy()   # rebuild content with the new palette
         self._build_ui()
         self.refresh()
-        self._save_appearance()
+        self._save_settings()
         self.log(f"Switched to {mode} mode.")
 
     def _bind_shortcuts(self) -> None:
@@ -1112,6 +1126,7 @@ class App(tk.Tk):
                 return
         elif not self._confirm_discard():
             return
+        self._save_settings()   # remember window size/position + theme
         self.panic.set()
         for lst in (getattr(self, "_klistener", None),
                     getattr(self, "_hk_listener", None)):
