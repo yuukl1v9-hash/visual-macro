@@ -489,9 +489,7 @@ class App(tk.Tk):
     def on_record(self) -> None:
         if self._running or self._recording:
             return
-        name = simpledialog.askstring(
-            "Record macro", "Name for this macro:", initialvalue="my-macro",
-            parent=self)
+        name = ctk_ask(self, "Record macro", "Name for this macro:", "my-macro")
         if not name:
             return
         self._recording = True
@@ -635,8 +633,7 @@ class App(tk.Tk):
 
         def show():
             try:
-                result["v"] = simpledialog.askstring(
-                    "Macro input", prompt, initialvalue=default, parent=self)
+                result["v"] = ctk_ask(self, "Macro input", prompt, default)
             finally:
                 done.set()
 
@@ -859,46 +856,38 @@ class App(tk.Tk):
 
     # -- about -------------------------------------------------------------
     def on_about(self) -> None:
-        dlg = tk.Toplevel(self)
+        dlg = ctk.CTkToplevel(self)
         dlg.title("About visual-macro")
-        dlg.configure(bg=THEME["bg"])
+        dlg.geometry("420x290")
         dlg.transient(self)
         dlg.resizable(False, False)
-        if self._icon:
-            try:
-                dlg.iconbitmap(self._icon)
-            except tk.TclError:
-                pass
-        ttk.Label(dlg, text="visual-macro", font=("Segoe UI", 17, "bold")).pack(
-            padx=28, pady=(20, 0))
-        ttk.Label(dlg, text=f"version {VERSION}", style="Dim.TLabel").pack()
-        ttk.Label(dlg, justify="center",
-                  text="Record & replay desktop tasks.\nSteps are found by image, "
-                       "text (OCR) or an AI model —\nnot fixed coordinates.").pack(
-            padx=28, pady=(12, 8))
-        link = ttk.Label(dlg, text=REPO_URL, foreground=THEME["accent"])
-        link.pack()
-        ttk.Label(dlg, text="MIT License", style="Dim.TLabel").pack(pady=(6, 0))
-
-        row = ttk.Frame(dlg, padding=14)
-        row.pack()
+        dlg.grab_set()
+        _dialog_icon(dlg)
+        ctk.CTkLabel(dlg, text="⚡ visual-macro",
+                     font=ctk.CTkFont(size=20, weight="bold"),
+                     text_color=THEME["accent"]).pack(padx=28, pady=(22, 0))
+        ctk.CTkLabel(dlg, text=f"version {VERSION}",
+                     text_color=THEME["subtext"]).pack()
+        ctk.CTkLabel(dlg, justify="center",
+                     text="Record & replay desktop tasks.\nSteps are found by "
+                          "image, text (OCR) or an AI model —\nnot fixed "
+                          "coordinates.").pack(padx=28, pady=(14, 8))
+        ctk.CTkLabel(dlg, text=REPO_URL, text_color=THEME["accent"]).pack()
+        ctk.CTkLabel(dlg, text="MIT License",
+                     text_color=THEME["subtext"]).pack(pady=(6, 0))
 
         def copy_link():
             self.clipboard_clear()
             self.clipboard_append(REPO_URL)
             self.log("Repo link copied to clipboard.")
 
-        ttk.Button(row, text="Copy link", command=copy_link).pack(side="left", padx=4)
-        ttk.Button(row, text="Close", style="Accent.TButton",
-                   command=dlg.destroy).pack(side="left")
-        dlg.grab_set()
-        _dark_titlebar(dlg)
-        dlg.update_idletasks()
-        # center over the main window
-        px, py = self.winfo_rootx(), self.winfo_rooty()
-        pw, ph = self.winfo_width(), self.winfo_height()
-        w, h = dlg.winfo_width(), dlg.winfo_height()
-        dlg.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 3}")
+        row = ctk.CTkFrame(dlg, fg_color="transparent")
+        row.pack(pady=16)
+        ctk.CTkButton(row, text="Copy link", command=copy_link, width=100,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="left", padx=6)
+        ctk.CTkButton(row, text="Close", command=dlg.destroy, width=100).pack(
+            side="left", padx=6)
 
     # -- test a single detection step -------------------------------------
     DETECTION = {"find_click", "wait_for", "find_text_click", "wait_for_text",
@@ -1186,91 +1175,126 @@ class Tooltip:
             self.tip = None
 
 
-def _choose_action(parent) -> str | None:
-    dlg = tk.Toplevel(parent)
-    dlg.title("Add a step")
-    dlg.configure(bg=THEME["bg"])
-    dlg.transient(parent)
-    dlg.grab_set()
-    ttk.Label(dlg, text="What should this step do?",
-              padding=(12, 10)).pack(anchor="w")
-    c = THEME
-    lb = tk.Listbox(dlg, width=40, height=len(FRIENDLY_STEPS), activestyle="none",
-                    bg=c["surface"], fg=c["text"], selectbackground=c["accent"],
-                    selectforeground=c["bg"], relief="flat", highlightthickness=0,
-                    font=("Segoe UI", 10))
-    for i, (label, act) in enumerate(FRIENDLY_STEPS):
-        lb.insert("end", label)
-        if act is None:  # dim the section headers
-            lb.itemconfig(i, foreground=c["subtext"], selectbackground=c["surface"])
-    lb.pack(padx=12, fill="both", expand=True)
+def _dialog_icon(win) -> None:
+    """Apply the app icon to a CTkToplevel (needs a small delay on CTk)."""
+    ic = _icon_path()
+    if ic:
+        win.after(250, lambda: win.winfo_exists() and win.iconbitmap(ic))
+
+
+def ctk_ask(parent, title: str, prompt: str, default: str = "") -> "str | None":
+    """A dark CTk text-input dialog. Returns the string, or None if cancelled."""
+    win = ctk.CTkToplevel(parent)
+    win.title(title)
+    win.transient(parent)
+    win.geometry("400x180")
+    win.grab_set()
+    _dialog_icon(win)
     out = {"v": None}
+    ctk.CTkLabel(win, text=prompt, wraplength=360, justify="left").pack(
+        padx=20, pady=(20, 8), anchor="w")
+    var = tk.StringVar(value=default)
+    ent = ctk.CTkEntry(win, textvariable=var, width=360)
+    ent.pack(padx=20)
+    ent.focus_set()
 
     def ok(*_):
-        sel = lb.curselection()
-        if not sel:
-            return
-        act = FRIENDLY_STEPS[sel[0]][1]
-        if act is None:  # header row — ignore
-            return
+        out["v"] = var.get()
+        win.destroy()
+
+    row = ctk.CTkFrame(win, fg_color="transparent")
+    row.pack(pady=18)
+    ctk.CTkButton(row, text="OK", command=ok, width=90).pack(side="left", padx=6)
+    ctk.CTkButton(row, text="Cancel", command=win.destroy, width=90,
+                  fg_color=THEME["card"], hover_color=THEME["hover"]).pack(side="left")
+    ent.bind("<Return>", ok)
+    win.bind("<Escape>", lambda e: win.destroy())
+    parent.wait_window(win)
+    return out["v"]
+
+
+def _choose_action(parent) -> str | None:
+    dlg = ctk.CTkToplevel(parent)
+    dlg.title("Add a step")
+    dlg.geometry("380x540")
+    dlg.transient(parent)
+    dlg.grab_set()
+    _dialog_icon(dlg)
+    ctk.CTkLabel(dlg, text="What should this step do?",
+                 font=ctk.CTkFont(size=15, weight="bold")).pack(
+        padx=16, pady=(14, 4), anchor="w")
+    out = {"v": None}
+
+    def pick(act):
         out["v"] = act
         dlg.destroy()
 
-    lb.bind("<Double-1>", ok)
-    btnf = ttk.Frame(dlg, padding=10)
-    btnf.pack()
-    ttk.Button(btnf, text="Add", style="Accent.TButton", command=ok).pack(
-        side="left", padx=4)
-    ttk.Button(btnf, text="Cancel", command=dlg.destroy).pack(side="left")
-    _dark_titlebar(dlg)
+    frame = ctk.CTkScrollableFrame(dlg, fg_color="transparent")
+    frame.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+    for label, act in FRIENDLY_STEPS:
+        if act is None:
+            ctk.CTkLabel(frame, text=label.strip(" —").upper(),
+                         font=ctk.CTkFont(size=11, weight="bold"),
+                         text_color=THEME["subtext"]).pack(
+                anchor="w", pady=(10, 2), padx=4)
+        else:
+            ctk.CTkButton(frame, text=label, anchor="w", height=30, corner_radius=6,
+                          fg_color=THEME["card"], hover_color=THEME["hover"],
+                          text_color=THEME["text"],
+                          command=lambda a=act: pick(a)).pack(fill="x", pady=2)
+    ctk.CTkButton(dlg, text="Cancel", command=dlg.destroy, width=100,
+                  fg_color=THEME["card"], hover_color=THEME["hover"]).pack(pady=(0, 12))
     parent.wait_window(dlg)
     return out["v"]
 
 
-class StepEditor(tk.Toplevel):
+class StepEditor(ctk.CTkToplevel):
     """Modal editor whose fields depend on the step's action."""
 
     def __init__(self, parent, step: dict):
         super().__init__(parent)
         self.title("Edit step")
-        self.configure(bg=THEME["bg"])
         self.transient(parent)
         self.grab_set()
         self.result: dict | None = None
         self._step = dict(step)
         self._vars: dict[str, tk.StringVar] = {}
         self._parent = parent
+        _dialog_icon(self)
 
         action = self._step.get("action", "wait")
         args = self._step.get("args", {}) or {}
-        ttk.Label(self, text=f"Action: {action}", padding=(10, 8)).grid(
-            row=0, column=0, columnspan=3, sticky="w")
+        ctk.CTkLabel(self, text=f"Edit  ·  {action}",
+                     font=ctk.CTkFont(size=15, weight="bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(14, 8))
 
         fields = self._fields_for(action, args)
         for r, (label, key, val) in enumerate(fields, start=1):
-            ttk.Label(self, text=label, padding=(10, 2)).grid(
-                row=r, column=0, sticky="e")
+            ctk.CTkLabel(self, text=label, text_color=THEME["subtext"]).grid(
+                row=r, column=0, sticky="e", padx=(14, 8), pady=4)
             var = tk.StringVar(value=str(val))
             self._vars[key] = var
             if action == "call" and key == "target":
                 # dropdown of saved macros (editable — you can still type one
                 # you haven't saved yet)
-                ttk.Combobox(self, textvariable=var, values=_macro_names(),
-                             width=30).grid(row=r, column=1, padx=(0, 4), pady=2)
+                ctk.CTkComboBox(self, values=_macro_names(), variable=var,
+                                width=240).grid(row=r, column=1, pady=4)
             else:
-                ttk.Entry(self, textvariable=var, width=32).grid(
-                    row=r, column=1, padx=(0, 4), pady=2)
+                ctk.CTkEntry(self, textvariable=var, width=240).grid(
+                    row=r, column=1, pady=4)
             if key == "region":  # drag-a-box picker
-                ttk.Button(self, text="Pick ▢", width=7,
-                           command=lambda v=var: self._pick_region(v)).grid(
-                    row=r, column=2, padx=(0, 10))
+                ctk.CTkButton(self, text="Pick ▢", width=64,
+                              fg_color=THEME["card"], hover_color=THEME["hover"],
+                              command=lambda v=var: self._pick_region(v)).grid(
+                    row=r, column=2, padx=(6, 14))
 
-        btns = ttk.Frame(self, padding=8)
-        btns.grid(row=len(fields) + 1, column=0, columnspan=3)
-        ttk.Button(btns, text="OK", style="Accent.TButton",
-                   command=self._ok).pack(side="left", padx=4)
-        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left")
-        _dark_titlebar(self)
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=len(fields) + 1, column=0, columnspan=3, pady=14)
+        ctk.CTkButton(btns, text="OK", command=self._ok, width=90).pack(
+            side="left", padx=6)
+        ctk.CTkButton(btns, text="Cancel", command=self.destroy, width=90,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="left")
         parent.wait_window(self)
 
     def _pick_region(self, var: tk.StringVar) -> None:
@@ -1539,7 +1563,7 @@ class RegionPicker(tk.Toplevel):
         self.destroy()
 
 
-class HotkeyDialog(tk.Toplevel):
+class HotkeyDialog(ctk.CTkToplevel):
     """Bind global hotkeys to saved macros. Persists to hotkeys.json and
     restarts the app's background listener on every change."""
 
@@ -1547,42 +1571,47 @@ class HotkeyDialog(tk.Toplevel):
         super().__init__(app)
         self.app = app
         self.title("Global hotkeys")
-        self.configure(bg=THEME["bg"])
+        self.geometry("500x430")
         self.transient(app)
         self.grab_set()
+        _dialog_icon(self)
         self._pick = tk.StringVar(value="")  # chosen macro path
 
-        ttk.Label(self, text="Press a hotkey from any app to run a macro.",
-                  padding=(12, 10)).grid(row=0, column=0, columnspan=3, sticky="w")
+        ctk.CTkLabel(self, text="Press a hotkey from any app to run a macro.",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(
+            padx=16, pady=(14, 8), anchor="w")
 
-        self.lb = tk.Listbox(self, width=52, height=7, activestyle="none",
+        self.lb = tk.Listbox(self, height=8, activestyle="none",
                              bg=THEME["surface"], fg=THEME["text"],
                              selectbackground=THEME["accent"],
                              selectforeground=THEME["bg"], relief="flat",
                              highlightthickness=0, font=("Consolas", 10))
-        self.lb.grid(row=1, column=0, columnspan=3, padx=12, sticky="we")
+        self.lb.pack(fill="both", expand=True, padx=16)
 
-        ttk.Button(self, text="Remove selected", command=self._remove).grid(
-            row=2, column=0, columnspan=3, pady=(6, 10))
+        ctk.CTkButton(self, text="Remove selected", command=self._remove,
+                      width=150, fg_color=THEME["card"],
+                      hover_color=THEME["hover"]).pack(pady=8)
 
-        ttk.Label(self, text="New:  hotkey", padding=(12, 2)).grid(
-            row=3, column=0, sticky="e")
+        form = ctk.CTkFrame(self, fg_color="transparent")
+        form.pack(fill="x", padx=16)
+        ctk.CTkLabel(form, text="Hotkey").pack(side="left")
         self.hk_var = tk.StringVar(value="ctrl+alt+1")
-        ttk.Entry(self, textvariable=self.hk_var, width=16).grid(
-            row=3, column=1, sticky="w")
-        ttk.Button(self, text="Pick macro…", command=self._choose).grid(
-            row=3, column=2, padx=(0, 10))
-        self.pick_lbl = ttk.Label(self, text="(no macro chosen)",
-                                  style="Dim.TLabel", padding=(12, 0))
-        self.pick_lbl.grid(row=4, column=0, columnspan=3, sticky="w")
+        ctk.CTkEntry(form, textvariable=self.hk_var, width=130).pack(
+            side="left", padx=8)
+        ctk.CTkButton(form, text="Pick macro…", command=self._choose, width=120,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="left")
+        self.pick_lbl = ctk.CTkLabel(self, text="(no macro chosen)",
+                                     text_color=THEME["subtext"])
+        self.pick_lbl.pack(anchor="w", padx=16, pady=(6, 0))
 
-        btns = ttk.Frame(self, padding=10)
-        btns.grid(row=5, column=0, columnspan=3)
-        ttk.Button(btns, text="Add binding", style="Accent.TButton",
-                   command=self._add).pack(side="left", padx=4)
-        ttk.Button(btns, text="Close", command=self.destroy).pack(side="left")
-
-        _dark_titlebar(self)
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=14)
+        ctk.CTkButton(btns, text="Add binding", command=self._add,
+                      width=120).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Close", command=self.destroy, width=90,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="left")
         self._refresh()
 
     def _refresh(self):
