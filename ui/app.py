@@ -15,6 +15,7 @@ import os
 import queue
 import sys
 import threading
+from datetime import datetime
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -39,6 +40,7 @@ MACROS = os.path.join(ROOT, "macros")
 VERSION = "1.0.0"
 REPO_URL = "https://github.com/yuukl1v9-hash/visual-macro"
 HOTKEYS_FILE = os.path.join(ROOT, "hotkeys.json")
+SCHEDULES_FILE = os.path.join(ROOT, "schedules.json")
 _MODS = {"ctrl", "alt", "shift", "win", "cmd"}
 
 # Dark palette (Catppuccin-ish) used across the UI.
@@ -237,6 +239,9 @@ class App(tk.Tk):
         self._hk_listener = None
         self._load_hotkeys()
         self._restart_hotkeys()
+        self._schedules = self._load_schedules()  # list of {type,value,macro}
+        self._sched_state: dict = {}              # per-schedule fire tracking
+        self.after(15000, self._tick_scheduler)   # in-app scheduler
         self.after(80, self._drain_log)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._bind_shortcuts()
@@ -399,6 +404,8 @@ class App(tk.Tk):
                      text_color=c["subtext"]).pack(pady=(16, 2), padx=14, anchor="w")
         self._sidebar_btn(side, "  ⌨  Hotkeys…", self.on_hotkeys,
                           tip="Bind a global hotkey to a saved macro.")
+        self._sidebar_btn(side, "  🕑  Schedule…", self.on_schedule,
+                          tip="Run a saved macro daily or on an interval.")
         self._sidebar_btn(side, "  ⓘ  About", self.on_about)
         ctk.CTkLabel(side, text=f"v{VERSION}", text_color=c["subtext"],
                      font=ctk.CTkFont(size=11)).pack(side="bottom", pady=(4, 12))
@@ -785,25 +792,77 @@ class App(tk.Tk):
         except Exception as e:
             self.log(f"Could not start hotkeys: {e}")
 
-    def _hotkey_fire(self, path: str) -> None:
-        """A bound hotkey was pressed — play that macro file (if not busy)."""
+    def _play_file(self, path: str, why: str) -> None:
+        """Play a macro file (used by hotkeys and the scheduler). No-op if busy."""
         if self._running or self._recording:
-            self.log("Hotkey ignored — already running.")
+            self.log(f"{why} skipped — already running.")
             return
         if not os.path.exists(path):
-            self.log(f"Hotkey macro missing: {path}")
+            self.log(f"{why}: macro missing — {path}")
             return
         try:
             macro = Macro.load(path)
         except Exception as e:
-            self.log(f"Hotkey load failed: {e}")
+            self.log(f"{why}: load failed — {e}")
             return
         name = os.path.basename(path)
-        self.log(f"[hotkey] playing {name}")
-        self._run_macro(macro, f"Playing {name} (hotkey)…  (F12 to abort)")
+        self.log(f"[{why}] playing {name}")
+        self._run_macro(macro, f"Playing {name} ({why})…  (F12 to abort)")
+
+    def _hotkey_fire(self, path: str) -> None:
+        self._play_file(path, "hotkey")
 
     def on_hotkeys(self) -> None:
         HotkeyDialog(self)
+
+    # -- scheduler ---------------------------------------------------------
+    def _load_schedules(self) -> list:
+        try:
+            import json
+            with open(SCHEDULES_FILE, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _save_schedules(self) -> None:
+        import json
+        try:
+            with open(SCHEDULES_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._schedules, f, indent=2)
+        except OSError as e:
+            self.log(f"Could not save schedules: {e}")
+
+    def _tick_scheduler(self) -> None:
+        """Fire any due schedules. Runs on the Tk loop every 15s while open."""
+        try:
+            now = datetime.now()
+            for s in self._schedules:
+                if not s.get("enabled", True):
+                    continue
+                key = f"{s.get('type')}|{s.get('value')}|{s.get('macro')}"
+                if s.get("type") == "daily":
+                    if now.strftime("%H:%M") == str(s.get("value")):
+                        stamp = now.strftime("%Y-%m-%d %H:%M")
+                        if self._sched_state.get(key) != stamp:
+                            self._sched_state[key] = stamp
+                            self._play_file(s.get("macro", ""), "schedule")
+                elif s.get("type") == "every":
+                    try:
+                        mins = float(s.get("value"))
+                    except (TypeError, ValueError):
+                        continue
+                    nxt = self._sched_state.get(key)
+                    if nxt is None:                     # arm on first sight
+                        self._sched_state[key] = now.timestamp() + mins * 60
+                    elif now.timestamp() >= nxt:
+                        self._sched_state[key] = now.timestamp() + mins * 60
+                        self._play_file(s.get("macro", ""), "schedule")
+        finally:
+            self.after(15000, self._tick_scheduler)
+
+    def on_schedule(self) -> None:
+        ScheduleDialog(self)
 
     def on_play_data(self) -> None:
         """Run the macro once per row of a CSV; each column becomes a ${var}."""
@@ -1733,6 +1792,120 @@ class HotkeyDialog(ctk.CTkToplevel):
         self.app._hotkeys.pop(hk, None)
         self.app._save_hotkeys()
         self.app._restart_hotkeys()
+        self._refresh()
+
+
+class ScheduleDialog(ctk.CTkToplevel):
+    """Schedule saved macros to run daily at HH:MM or every N minutes.
+    Runs while the app is open; persists to schedules.json."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("Schedule macros")
+        self.geometry("520x460")
+        self.transient(app)
+        self.grab_set()
+        _dialog_icon(self)
+        self._pick = tk.StringVar(value="")
+
+        ctk.CTkLabel(self, text="Run a macro daily or on an interval "
+                     "(while the app is open).",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(
+            padx=16, pady=(14, 8), anchor="w")
+
+        self.lb = tk.Listbox(self, height=7, activestyle="none",
+                             bg=THEME["surface"], fg=THEME["text"],
+                             selectbackground=THEME["accent"],
+                             selectforeground=THEME["bg"], relief="flat",
+                             highlightthickness=0, font=("Consolas", 10))
+        self.lb.pack(fill="both", expand=True, padx=16)
+        ctk.CTkButton(self, text="Remove selected", command=self._remove,
+                      width=150, fg_color=THEME["card"],
+                      hover_color=THEME["hover"]).pack(pady=8)
+
+        form = ctk.CTkFrame(self, fg_color="transparent")
+        form.pack(fill="x", padx=16)
+        self.kind = ctk.CTkSegmentedButton(form, values=["Daily", "Every"])
+        self.kind.set("Daily")
+        self.kind.pack(side="left")
+        self.val = tk.StringVar(value="09:00")
+        ctk.CTkEntry(form, textvariable=self.val, width=90).pack(side="left", padx=8)
+        self.val_hint = ctk.CTkLabel(form, text="HH:MM  /  minutes",
+                                     text_color=THEME["subtext"])
+        self.val_hint.pack(side="left")
+        ctk.CTkButton(form, text="Pick macro…", command=self._choose, width=110,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="right")
+        self.pick_lbl = ctk.CTkLabel(self, text="(no macro chosen)",
+                                     text_color=THEME["subtext"])
+        self.pick_lbl.pack(anchor="w", padx=16, pady=(6, 0))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=14)
+        ctk.CTkButton(btns, text="Add schedule", command=self._add,
+                      width=130).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Close", command=self.destroy, width=90,
+                      fg_color=THEME["card"], hover_color=THEME["hover"]).pack(
+            side="left")
+        self._refresh()
+
+    def _refresh(self):
+        self.lb.delete(0, "end")
+        self._items = list(self.app._schedules)
+        for s in self._items:
+            if s.get("type") == "daily":
+                when = f"daily at {s.get('value')}"
+            else:
+                when = f"every {s.get('value')} min"
+            self.lb.insert("end", f"{when:<22}  →  "
+                           f"{os.path.basename(s.get('macro', ''))}")
+        if not self._items:
+            self.lb.insert("end", "(no schedules yet)")
+
+    def _choose(self):
+        p = filedialog.askopenfilename(
+            initialdir=MACROS, filetypes=[("Macro JSON", "*.json")], parent=self)
+        if p:
+            self._pick.set(p)
+            self.pick_lbl.configure(text=os.path.basename(p))
+
+    def _add(self):
+        macro = self._pick.get()
+        if not macro:
+            messagebox.showerror("Schedule", "Pick a macro first.", parent=self)
+            return
+        kind = "daily" if self.kind.get() == "Daily" else "every"
+        value = self.val.get().strip()
+        if kind == "daily":
+            try:
+                datetime.strptime(value, "%H:%M")
+            except ValueError:
+                messagebox.showerror("Schedule", "Time must be HH:MM (24-hour), "
+                                     "e.g. 09:00 or 14:30.", parent=self)
+                return
+        else:
+            try:
+                if float(value) <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Schedule", "Interval must be a positive "
+                                     "number of minutes.", parent=self)
+                return
+        self.app._schedules.append({"type": kind, "value": value, "macro": macro,
+                                    "enabled": True})
+        self.app._save_schedules()
+        self._pick.set("")
+        self.pick_lbl.configure(text="(no macro chosen)")
+        self._refresh()
+
+    def _remove(self):
+        sel = self.lb.curselection()
+        if not sel or not self._items:
+            return
+        target = self._items[sel[0]]
+        self.app._schedules = [s for s in self.app._schedules if s is not target]
+        self.app._save_schedules()
         self._refresh()
 
 

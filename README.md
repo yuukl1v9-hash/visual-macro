@@ -183,6 +183,16 @@ Bind a keyboard shortcut to a saved macro and fire it **from any app**, AHK-styl
 app is open; pressing a bound key plays that macro (ignored if one's already
 running). `F12` still aborts.
 
+### Scheduling (🕑 Schedule)
+
+Run a saved macro **daily at a set time** or **every N minutes**. Click
+**🕑 Schedule**, pick a macro, choose **Daily** (`HH:MM`, 24-hour) or **Every**
+(minutes), **Add schedule**. Schedules persist in `schedules.json` and fire while
+the app is open (a due macro is skipped if one is already running).
+
+> This is an in-app scheduler — the app must be running. To fire a macro when the
+> app is closed, point **Windows Task Scheduler** at `python main.py macros\your.json`.
+
 Prefer the command line? The recorder and player also run standalone — see below.
 
 ### Getting reliable clicks (avoiding the "wrong button")
