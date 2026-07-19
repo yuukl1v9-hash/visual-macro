@@ -59,12 +59,22 @@ moves or the layout shifts.
 </tr>
 <tr>
 <td width="50%" align="center">
+<img src="docs/record.gif" alt="recording a login flow"><br>
+<sub><b>Recording</b> — steps and the capture log appear live as you act.</sub>
+</td>
+<td width="50%" align="center">
 <img src="docs/editor.png" alt="step editor dialog"><br>
 <sub><b>Step editor</b> — fields match the step type; no syntax to learn.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" align="center">
 <img src="docs/addmenu.png" alt="add-step menu"><br>
 <sub><b>Add step</b> — a plain-English menu; no need to know the step names.</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/about.png" alt="about dialog"><br>
+<sub><b>About</b> — every dialog matches the dark theme.</sub>
 </td>
 </tr>
 </table>
